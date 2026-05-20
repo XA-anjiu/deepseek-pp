@@ -1,19 +1,17 @@
 import type { BackgroundConfig, Memory, ModelType, Skill, SystemPromptPreset, ToolCall } from '../core/types';
 import { DSML } from '../core/constants';
-import { stripToolCalls } from '../core/interceptor/tool-parser';
-import {
-  DSML_HIDDEN_CLASS,
-  TOOL_CARD_CLASS,
-  autoCollapseToolCard,
-  createToolCard,
-  setToolCardResult,
-  type ToolCardResult,
-} from '../core/ui/tool-card';
+import type { ToolCardResult } from '../core/ui/tool-card';
 
-const DSML_START = `<${DSML}tool_calls>`;
-const DSML_END = `</${DSML}tool_calls>`;
+const TOOL_BLOCK_ID = 'dpp-tool-block';
+const TOOL_BLOCK_STYLE_ID = 'dpp-tool-block-css';
 
-const pendingCards: HTMLElement[] = [];
+interface ToolExecution {
+  name: string;
+  result: ToolCardResult;
+}
+
+let toolExecutions: ToolExecution[] = [];
+let toolBlockEl: HTMLElement | null = null;
 
 export default defineContentScript({
   matches: ['*://chat.deepseek.com/*'],
@@ -40,7 +38,9 @@ export default defineContentScript({
       switch (event.data.type) {
         case 'TOOL_CALL': {
           const call = event.data.data as ToolCall;
-          await handleToolCall(call);
+          const result = await executeToolCall(call);
+          toolExecutions.push({ name: call.name, result });
+          renderToolBlock();
           break;
         }
         case 'MEMORIES_USED': {
@@ -49,7 +49,11 @@ export default defineContentScript({
           break;
         }
         case 'RESPONSE_COMPLETE': {
-          finalizeResponse();
+          if (toolExecutions.length > 0) {
+            collapseToolBlock();
+            toolExecutions = [];
+            toolBlockEl = null;
+          }
           break;
         }
       }
@@ -66,8 +70,6 @@ export default defineContentScript({
         applyBackground(message.config as BackgroundConfig | null);
       }
     });
-
-    setupDOMObserver();
   },
 });
 
@@ -80,17 +82,6 @@ function syncToMainWorld(memories: Memory[], skills: Skill[], activePreset: Syst
     activePreset,
     modelType,
   });
-}
-
-async function handleToolCall(call: ToolCall) {
-  const card = createToolCard(call);
-  pendingCards.push(card);
-
-  attemptPlacement();
-
-  const result = await executeToolCall(call);
-  setToolCardResult(card, result);
-  autoCollapseToolCard(card, 2000);
 }
 
 async function executeToolCall(call: ToolCall): Promise<ToolCardResult> {
@@ -156,161 +147,198 @@ async function executeToolCall(call: ToolCall): Promise<ToolCardResult> {
   }
 }
 
-function finalizeResponse() {
-  hideRawDSMLText();
-  attemptPlacement();
-  cleanRemainingDSML();
-  pendingCards.length = 0;
+// --- Tool execution collapsible block (matches official "已思考" style) ---
+
+function injectToolBlockStyles() {
+  if (document.getElementById(TOOL_BLOCK_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = TOOL_BLOCK_STYLE_ID;
+  style.textContent = `
+    .dpp-tool-block {
+      margin-top: 8px;
+    }
+    .dpp-tool-block-header {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      user-select: none;
+      color: rgb(97, 102, 107);
+      font-size: 14px;
+      line-height: 20px;
+    }
+    .dpp-tool-block-header:hover {
+      color: rgb(60, 65, 70);
+    }
+    .dpp-tool-block-icon {
+      width: 16px;
+      height: 16px;
+      color: #4d6bfe;
+      flex-shrink: 0;
+    }
+    .dpp-tool-block-title {
+      font-weight: 500;
+      color: inherit;
+    }
+    .dpp-tool-block-chevron {
+      width: 12px;
+      height: 12px;
+      color: inherit;
+      transition: transform 0.2s ease;
+      margin-left: 2px;
+    }
+    .dpp-tool-block[data-collapsed="true"] .dpp-tool-block-chevron {
+      transform: rotate(-90deg);
+    }
+    .dpp-tool-block-body {
+      overflow: hidden;
+      transition: max-height 0.25s ease, opacity 0.2s ease;
+      max-height: 500px;
+      opacity: 1;
+      padding-left: 20px;
+      margin-top: 6px;
+    }
+    .dpp-tool-block[data-collapsed="true"] .dpp-tool-block-body {
+      max-height: 0;
+      opacity: 0;
+      margin-top: 0;
+    }
+    .dpp-tool-block-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 3px 0;
+      font-size: 13px;
+      color: rgb(64, 65, 79);
+      line-height: 1.5;
+    }
+    .dpp-tool-block-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #4d6bfe;
+      flex-shrink: 0;
+      margin-top: 7px;
+    }
+    .dpp-tool-block-item-text {
+      flex: 1;
+    }
+    .dpp-tool-block-item-name {
+      font-family: 'SF Mono', Monaco, Menlo, Consolas, monospace;
+      font-size: 12px;
+      color: #4d6bfe;
+    }
+    .dpp-tool-block-item-status {
+      color: #10b981;
+      margin-left: 6px;
+    }
+    .dpp-tool-block-item-status.error {
+      color: #ef4444;
+    }
+    @media (prefers-color-scheme: dark) {
+      .dpp-tool-block-header { color: rgb(155, 160, 165); }
+      .dpp-tool-block-header:hover { color: rgb(200, 205, 210); }
+      .dpp-tool-block-item { color: rgb(200, 200, 200); }
+    }
+  `;
+  document.head.appendChild(style);
 }
 
-function attemptPlacement() {
-  for (let i = pendingCards.length - 1; i >= 0; i--) {
-    if (placeCardForCall(pendingCards[i])) {
-      pendingCards.splice(i, 1);
-    }
+function renderToolBlock() {
+  injectToolBlockStyles();
+
+  if (!toolBlockEl) {
+    toolBlockEl = document.createElement('div');
+    toolBlockEl.id = TOOL_BLOCK_ID;
+    toolBlockEl.className = 'dpp-tool-block';
+    toolBlockEl.setAttribute('data-collapsed', 'false');
+
+    toolBlockEl.innerHTML = `
+      <div class="dpp-tool-block-header">
+        <svg class="dpp-tool-block-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        <span class="dpp-tool-block-title"></span>
+        <svg class="dpp-tool-block-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="dpp-tool-block-body"></div>
+    `;
+
+    toolBlockEl.querySelector('.dpp-tool-block-header')!.addEventListener('click', () => {
+      const collapsed = toolBlockEl!.getAttribute('data-collapsed') === 'true';
+      toolBlockEl!.setAttribute('data-collapsed', collapsed ? 'false' : 'true');
+    });
+
+    placeToolBlock(toolBlockEl);
+  }
+
+  // Update title
+  const count = toolExecutions.length;
+  const title = toolBlockEl.querySelector('.dpp-tool-block-title')!;
+  title.textContent = `已执行工具（${count}次）`;
+
+  // Update body with items
+  const body = toolBlockEl.querySelector('.dpp-tool-block-body')!;
+  body.innerHTML = '';
+  for (const exec of toolExecutions) {
+    const item = document.createElement('div');
+    item.className = 'dpp-tool-block-item';
+    item.innerHTML = `
+      <div class="dpp-tool-block-dot"></div>
+      <div class="dpp-tool-block-item-text">
+        <span class="dpp-tool-block-item-name">${exec.name}</span>
+        <span class="dpp-tool-block-item-status ${exec.result.ok ? '' : 'error'}">${exec.result.summary}${exec.result.detail ? ' · ' + exec.result.detail : ''}</span>
+      </div>
+    `;
+    body.appendChild(item);
   }
 }
 
-function placeCardForCall(card: HTMLElement): boolean {
-  const topHidden = getTopLevelHiddenElements();
-  if (topHidden.length === 0) return false;
-
-  const startIdx = topHidden.findIndex((el) =>
-    (el.textContent || '').includes(DSML_START),
-  );
-  if (startIdx === -1) return false;
-
-  let endIdx = -1;
-  for (let i = startIdx; i < topHidden.length; i++) {
-    if ((topHidden[i].textContent || '').includes(DSML_END)) {
-      endIdx = i;
-      break;
-    }
-  }
-  if (endIdx === -1) return false;
-
-  const group = topHidden.slice(startIdx, endIdx + 1);
-  const first = group[0];
-  const parent = first.parentNode;
-  if (!parent) return false;
-
-  parent.insertBefore(card, first);
-  for (const el of group) el.remove();
-  return true;
-}
-
-function getTopLevelHiddenElements(): HTMLElement[] {
-  const all = Array.from(document.querySelectorAll<HTMLElement>(`.${DSML_HIDDEN_CLASS}`));
-  return all.filter((el) => !el.parentElement?.closest(`.${DSML_HIDDEN_CLASS}`));
-}
-
-function hideRawDSMLText() {
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      const parent = (node as Text).parentElement;
-      if (!parent) return NodeFilter.FILTER_REJECT;
-      if (parent.closest(`.${DSML_HIDDEN_CLASS}`)) return NodeFilter.FILTER_REJECT;
-      if (parent.closest(`.${TOOL_CARD_CLASS}`)) return NodeFilter.FILTER_REJECT;
-      if (!(node.textContent || '').includes(DSML)) return NodeFilter.FILTER_REJECT;
-      return NodeFilter.FILTER_ACCEPT;
-    },
-  });
-
-  const targets: Text[] = [];
-  let n: Node | null;
-  while ((n = walker.nextNode())) targets.push(n as Text);
-
-  for (const node of targets) hideContainingBlock(node);
-}
-
-function hideContainingBlock(node: Text) {
-  const direct = node.parentElement;
-  if (!direct) return;
-
-  let target: HTMLElement = direct;
-  while (target.parentElement && target.parentElement !== document.body) {
-    if (!isOnlyMeaningfulChild(target, target.parentElement)) break;
-    target = target.parentElement;
-  }
-  target.classList.add(DSML_HIDDEN_CLASS);
-}
-
-function isOnlyMeaningfulChild(child: HTMLElement, parent: HTMLElement): boolean {
-  for (const sibling of parent.childNodes) {
-    if (sibling === child) continue;
-    if (sibling.nodeType === Node.TEXT_NODE) {
-      if ((sibling.textContent || '').trim() !== '') return false;
-    } else if (sibling.nodeType === Node.ELEMENT_NODE) {
-      const el = sibling as HTMLElement;
-      if (el.classList.contains(DSML_HIDDEN_CLASS)) continue;
-      if (el.classList.contains(TOOL_CARD_CLASS)) continue;
-      if ((el.textContent || '').trim() !== '') return false;
-    }
-  }
-  return true;
-}
-
-function cleanRemainingDSML() {
-  const hidden = Array.from(document.querySelectorAll<HTMLElement>(`.${DSML_HIDDEN_CLASS}`));
-  for (const el of hidden) el.remove();
-
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-  while (walker.nextNode()) {
-    const node = walker.currentNode as Text;
-    if (node.parentElement?.closest(`.${TOOL_CARD_CLASS}`)) continue;
-    const text = node.textContent || '';
-    if (!text.includes(DSML)) continue;
-    const cleaned = stripToolCalls(text);
-    if (cleaned !== text) node.textContent = cleaned;
+function collapseToolBlock() {
+  if (toolBlockEl) {
+    setTimeout(() => {
+      toolBlockEl?.setAttribute('data-collapsed', 'true');
+    }, 1500);
   }
 }
 
-function setupDOMObserver() {
-  let patchTimer: ReturnType<typeof setTimeout> | null = null;
-  let dsmlTimer: ReturnType<typeof setTimeout> | null = null;
+function placeToolBlock(block: HTMLElement) {
+  // Find the last assistant message being streamed and place block after the response content
+  const messages = document.querySelectorAll('.ds-message');
+  if (messages.length === 0) return;
 
-  const scheduleDSMLProcess = () => {
-    if (dsmlTimer) return;
-    dsmlTimer = setTimeout(() => {
-      dsmlTimer = null;
-      hideRawDSMLText();
-      attemptPlacement();
-    }, 50);
-  };
+  const lastMsg = messages[messages.length - 1];
+  const responseContent = lastMsg.querySelector('._74c0879') || lastMsg.querySelector('[class*="message"]');
+  if (responseContent) {
+    responseContent.appendChild(block);
+  } else {
+    lastMsg.appendChild(block);
+  }
+}
 
-  const observer = new MutationObserver((mutations) => {
-    let needsDSML = false;
-    let needsPatch = false;
+// --- Background image feature (unchanged) ---
 
-    for (const mutation of mutations) {
-      if (mutation.type === 'characterData') {
-        if ((mutation.target.textContent || '').includes(DSML)) needsDSML = true;
-        continue;
-      }
-      for (const node of mutation.addedNodes) {
-        if (node.nodeType === Node.ELEMENT_NODE) {
-          needsPatch = true;
-          const el = node as HTMLElement;
-          if (el.classList?.contains(TOOL_CARD_CLASS) || el.classList?.contains(DSML_HIDDEN_CLASS)) continue;
-          if ((el.textContent || '').includes(DSML)) needsDSML = true;
-        } else if (node.nodeType === Node.TEXT_NODE) {
-          if ((node.textContent || '').includes(DSML)) needsDSML = true;
-        }
-      }
+function getToolbarBottom(): number {
+  const root = document.getElementById('root');
+  if (!root) return 0;
+
+  function walk(el: Element): number {
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    if (
+      rect.top >= -2 && rect.top <= 5 &&
+      rect.height > 30 && rect.height <= 80 &&
+      rect.width > 300 &&
+      (style.position === 'absolute' || style.position === 'sticky' || style.position === 'fixed')
+    ) {
+      return rect.bottom;
     }
-
-    if (needsDSML) scheduleDSMLProcess();
-
-    if (needsPatch && document.body.classList.contains('dpp-bg-active')) {
-      if (patchTimer) clearTimeout(patchTimer);
-      patchTimer = setTimeout(() => {
-        patchTimer = null;
-        patchContainerBackgrounds();
-      }, 200);
+    for (const child of el.children) {
+      const result = walk(child);
+      if (result > 0) return result;
     }
-  });
+    return 0;
+  }
 
-  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  return walk(root);
 }
 
 function hasVisibleBackground(style: CSSStyleDeclaration): boolean {
@@ -361,31 +389,6 @@ function patchContainerBackgrounds() {
   }
 }
 
-function getToolbarBottom(): number {
-  const root = document.getElementById('root');
-  if (!root) return 0;
-
-  function walk(el: Element): number {
-    const rect = el.getBoundingClientRect();
-    const style = getComputedStyle(el);
-    if (
-      rect.top >= -2 && rect.top <= 5 &&
-      rect.height > 30 && rect.height <= 80 &&
-      rect.width > 300 &&
-      (style.position === 'absolute' || style.position === 'sticky' || style.position === 'fixed')
-    ) {
-      return rect.bottom;
-    }
-    for (const child of el.children) {
-      const result = walk(child);
-      if (result > 0) return result;
-    }
-    return 0;
-  }
-
-  return walk(root);
-}
-
 function removeBackground() {
   document.getElementById('dpp-bg')?.remove();
   document.getElementById('dpp-bg-style')?.remove();
@@ -410,8 +413,8 @@ function applyBackground(config: BackgroundConfig | null) {
 
   document.body.classList.add('dpp-bg-active');
 
-  const overlayAlpha = (1 - config.opacity).toFixed(3);
-  const blurPx = ((1 - config.opacity) * 8).toFixed(1);
+  const overlayAlpha = (1 - config!.opacity).toFixed(3);
+  const blurPx = ((1 - config!.opacity) * 8).toFixed(1);
   document.body.style.setProperty('--dpp-overlay-light', `rgba(255, 255, 255, ${overlayAlpha})`);
   document.body.style.setProperty('--dpp-overlay-dark', `rgba(30, 30, 30, ${overlayAlpha})`);
   document.body.style.setProperty('--dpp-blur', `blur(${blurPx}px)`);
@@ -477,4 +480,12 @@ function applyBackground(config: BackgroundConfig | null) {
   if (!existingStyle) document.head.appendChild(styleEl);
 
   patchContainerBackgrounds();
+
+  // Re-patch on DOM changes
+  const observer = new MutationObserver(() => {
+    if (document.body.classList.contains('dpp-bg-active')) {
+      patchContainerBackgrounds();
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 }

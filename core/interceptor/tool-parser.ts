@@ -44,3 +44,26 @@ export function stripToolCalls(text: string): string {
   const regex = new RegExp(TOOL_CALLS_BLOCK_REGEX.source, 'g');
   return text.replace(regex, '').trim();
 }
+
+export function replaceToolCallsWithSummary(text: string): string {
+  const regex = new RegExp(TOOL_CALLS_BLOCK_REGEX.source, 'g');
+  return text.replace(regex, (match) => {
+    const calls = extractToolCalls(match);
+    if (calls.length === 0) return '';
+    const lines = calls.map(call => {
+      const name = call.name;
+      const detail = call.payload.name || call.payload.content || call.payload.id || '';
+      return `• ${formatToolName(name)}${detail ? '：' + detail : ''}`;
+    });
+    return '\n\n---\n🔧 已执行工具（' + calls.length + '次）\n' + lines.join('\n') + '\n---';
+  });
+}
+
+function formatToolName(name: string): string {
+  switch (name) {
+    case 'memory_save': return '保存记忆';
+    case 'memory_update': return '更新记忆';
+    case 'memory_delete': return '删除记忆';
+    default: return name;
+  }
+}
