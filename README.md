@@ -121,6 +121,48 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
 | 稳定性修复 | 修复流式取消、计时器清理、工具解析计数、多片段偏移和工具记录恢复等问题，减少长任务中的重复执行和状态丢失。 |
 | 验证脚本 | 补充 Shell MCP smoke check、MCP mock 验证和工具续跑契约检查，发布前覆盖编译、构建、打包和本机工具链路。 |
 
+<details>
+<summary>展开 0.3.0 变更回顾</summary>
+
+### 0.3.0 变更回顾
+
+0.3.0 以 0.2.0 的 MCP 和自动化平台为基线，重点把扩展从 Chrome 单目标发布推进到 Chrome / Edge / Firefox 多浏览器交付，并补齐主题一致性、版本展示和发布资产链路。
+
+| 方向 | 主要变化 |
+|------|----------|
+| 跨浏览器支持 | 新增 Chrome、Edge、Firefox MV3 构建与打包脚本；manifest 会按目标浏览器生成权限、侧栏入口和 Firefox 标识，避免把 Chromium-only 能力发到 Firefox。 |
+| 发布流程 | Release workflow 改为一次上传 Chrome / Edge / Firefox / sources 多个 zip；安装文档、MCP 操作说明和 mock 验证说明也改成浏览器中立口径。 |
+| 侧边栏体验 | 侧边栏顶部导航改为稳定 tab 组件，补齐图标、当前页语义和紧凑布局，适配更多浏览器侧栏宽度。 |
+| 深浅色一致性 | DeepSeek 页面主题会同步到侧边栏；记忆、MCP、设置、Skill 弹窗、工具执行卡片和自定义背景遮罩都适配明暗主题。 |
+| 版本一致性 | `package.json`、lockfile、manifest 和运行时展示同步到 0.3.0；侧边栏右上角、设置页底部和 MCP clientInfo 都从扩展 manifest 读取版本。 |
+| 文档归档 | 将 MCP rollout 文档迁入归档目录，新增 Edge/Firefox 支持归档，保留验证记录和后续手动测试线索。 |
+
+</details>
+
+<details>
+<summary>展开 0.2.0 变更回顾</summary>
+
+### 0.2.0 变更回顾
+
+0.2.0 汇总了 0.1.0 以来的主要增量，重点是把 DeepSeek++ 从“记忆 + Skill”扩展升级为完整的浏览器端工具平台。
+
+| 方向 | 主要变化 |
+|------|----------|
+| MCP 工具系统 | 新增 MCP 服务配置、工具发现、健康检查、调用历史、结果大小限制和超时控制；手动聊天和自动化任务都能自动执行 MCP 工具并把结果回传到同一会话。 |
+| 工具调用内核 | 从固定记忆工具扩展为动态工具契约；工具 schema、解析、流式过滤、历史清理和 prompt 注入都支持内置工具与 MCP 工具。 |
+| 自动化任务 | 新增侧边栏自动化页、任务编辑器、立即运行、cron/RRULE 调度、暂停/恢复、独立 DeepSeek 会话、运行历史和失败状态展示。 |
+| 记忆系统 | 新增记忆更新/删除工具，优化相关记忆筛选、思考模式、自动清理和工具执行折叠展示，刷新页面后能恢复刚执行过的工具状态。 |
+| Skill 与预设 | 新增 `/skill` 自动补全面板、内置/自定义技能管理、系统提示词预设、预设导入，以及 DeepSeek Expert 模式切换。 |
+| 同步与个性化 | 新增 WebDAV 同步记忆、Skill 和预设；新增 DeepSeek 页面自定义背景、动态透明度和模糊控制。 |
+| 文档与发布 | 增补侧边栏截图、MCP 操作说明、mock 验证脚本、TypeScript 修复、release workflow 和构建打包流程。 |
+
+<p align="center">
+  <img src="assets/screenshot-sidepanel-mcp.svg" width="300" alt="MCP 管理侧边栏">
+  <img src="assets/screenshot-sidepanel-automation.svg" width="300" alt="自动化任务侧边栏">
+</p>
+
+</details>
+
 ## 安装
 
 ### 从源码构建
