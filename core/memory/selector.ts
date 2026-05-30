@@ -9,17 +9,29 @@ const segmenter =
     ? new Intl.Segmenter('zh-Hans', { granularity: 'word' })
     : null;
 
+const SEGMENT_CACHE_LIMIT = 1000;
+const segmentCache = new Map<string, string[]>();
+
 export function segmentText(text: string): string[] {
-  if (segmenter) {
-    return [...segmenter.segment(text)]
+  const cached = segmentCache.get(text);
+  if (cached) return cached;
+
+  const words = segmenter
+    ? [...segmenter.segment(text)]
       .filter((s) => s.isWordLike)
       .map((s) => s.segment.toLowerCase())
+      .filter((w) => w.length > 1 && !STOP_WORDS.has(w))
+    : text
+      .toLowerCase()
+      .split(/[\s,，。！？；：、\-_/]+/)
       .filter((w) => w.length > 1 && !STOP_WORDS.has(w));
+
+  if (segmentCache.size >= SEGMENT_CACHE_LIMIT) {
+    const firstKey = segmentCache.keys().next().value;
+    if (firstKey !== undefined) segmentCache.delete(firstKey);
   }
-  return text
-    .toLowerCase()
-    .split(/[\s,，。！？；：、\-_/]+/)
-    .filter((w) => w.length > 1 && !STOP_WORDS.has(w));
+  segmentCache.set(text, words);
+  return words;
 }
 
 function keywordScore(promptWords: string[], memory: Memory): number {

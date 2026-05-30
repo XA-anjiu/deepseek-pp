@@ -1,13 +1,14 @@
-import { useState } from 'react';
-import MemoryPage from './pages/MemoryPage';
-import SkillPage from './pages/SkillPage';
-import PresetPage from './pages/PresetPage';
-import SettingsPage from './pages/SettingsPage';
-import AutomationPage from './pages/AutomationPage';
-import McpPage from './pages/McpPage';
+import { lazy, Suspense, useState } from 'react';
 import { getExtensionVersion } from '../../core/version';
 
 type Tab = 'memory' | 'skill' | 'preset' | 'automation' | 'mcp' | 'settings';
+
+const MemoryPage = lazy(() => import('./pages/MemoryPage'));
+const SkillPage = lazy(() => import('./pages/SkillPage'));
+const PresetPage = lazy(() => import('./pages/PresetPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const AutomationPage = lazy(() => import('./pages/AutomationPage'));
+const McpPage = lazy(() => import('./pages/McpPage'));
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'memory', label: '记忆', icon: 'M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z' },
@@ -70,12 +71,14 @@ export default function App() {
       </nav>
 
       <main className="flex-1 overflow-y-auto">
-        {tab === 'memory' && <MemoryPage />}
-        {tab === 'skill' && <SkillPage />}
-        {tab === 'preset' && <PresetPage />}
-        {tab === 'automation' && <AutomationPage />}
-        {tab === 'mcp' && <McpPage />}
-        {tab === 'settings' && <SettingsPage />}
+        <Suspense fallback={<div className="p-4 text-sm" style={{ color: 'var(--ds-text-tertiary)' }}>加载中...</div>}>
+          {tab === 'memory' && <MemoryPage />}
+          {tab === 'skill' && <SkillPage />}
+          {tab === 'preset' && <PresetPage />}
+          {tab === 'automation' && <AutomationPage />}
+          {tab === 'mcp' && <McpPage />}
+          {tab === 'settings' && <SettingsPage />}
+        </Suspense>
       </main>
     </div>
   );

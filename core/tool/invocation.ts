@@ -15,9 +15,15 @@ export interface ToolParsingInput {
   descriptors?: readonly ToolDescriptor[];
 }
 
+const catalogCache = new WeakMap<readonly ToolDescriptor[], ToolInvocationCatalog>();
+const xmlRegexSourceCache = new WeakMap<ToolInvocationCatalog, string>();
+
 export function createToolInvocationCatalog(
   descriptors: readonly ToolDescriptor[] = DEFAULT_TOOL_DESCRIPTORS,
 ): ToolInvocationCatalog {
+  const cached = catalogCache.get(descriptors);
+  if (cached) return cached;
+
   const descriptorByInvocationName = new Map<string, ToolDescriptor>();
   const descriptorByName = new Map<string, ToolDescriptor>();
   const invocationNamesByDescriptorId = new Map<string, string[]>();
@@ -53,19 +59,26 @@ export function createToolInvocationCatalog(
     invocationNamesByDescriptorId.set(descriptor.id, acceptedNames);
   }
 
-  return {
+  const catalog: ToolInvocationCatalog = {
     descriptors,
     invocationNames: [...descriptorByInvocationName.keys()],
     descriptorByInvocationName,
     descriptorByName,
     invocationNamesByDescriptorId,
   };
+  catalogCache.set(descriptors, catalog);
+  return catalog;
 }
 
 export function createXmlToolCallRegex(catalog: ToolInvocationCatalog): RegExp {
   if (catalog.invocationNames.length === 0) return /$a/g;
-  const names = catalog.invocationNames.map(escapeRegExp).join('|');
-  return new RegExp(`<(${names})>\\s*([\\s\\S]*?)\\s*<\\/\\1>`, 'g');
+  let source = xmlRegexSourceCache.get(catalog);
+  if (!source) {
+    const names = catalog.invocationNames.map(escapeRegExp).join('|');
+    source = `<(${names})>\\s*([\\s\\S]*?)\\s*<\\/\\1>`;
+    xmlRegexSourceCache.set(catalog, source);
+  }
+  return new RegExp(source, 'g');
 }
 
 export function createToolCallFromInvocation(

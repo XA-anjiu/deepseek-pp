@@ -14,6 +14,7 @@ import {
 const COMPLETION_PATH = new URL(DEEPSEEK_API_URL).pathname;
 const POW_CHALLENGE_PATH = '/api/v0/chat/create_pow_challenge';
 const CHAT_SESSION_CREATE_PATH = '/api/v0/chat_session/create';
+const HISTORY_PATH = '/api/v0/chat/history_messages';
 const DEFAULT_MODEL_TYPE = 'default';
 const DEFAULT_APP_VERSION = '2.0.0';
 const DEEPSEEK_CLIENT_PLATFORM = 'web';
@@ -28,6 +29,20 @@ export interface ModelTurn {
   responseMessageId: number | null;
   requestMessageId: number | null;
   finished: boolean;
+}
+
+export interface DeepSeekHistorySnapshot {
+  chatSessionId: string;
+  parentMessageId: number | null;
+  assistantMessageId: number | null;
+  messageCount: number;
+  verifiedAt: number;
+}
+
+interface DeepSeekHistoryMessage {
+  id: number | null;
+  parentId: number | null;
+  role: string | null;
 }
 
 export interface SubmitPromptInput {
@@ -124,12 +139,14 @@ export async function createPowHeaders(
   }
 }
 
-export function createClientHeaders(): Record<string, string> {
+export function createClientHeaders(options?: { missingTokenMessage?: string }): Record<string, string> {
   if (rememberedClientHeaders) return { ...rememberedClientHeaders };
 
   const token = readDeepSeekUserToken();
   if (!token) {
-    throw new DeepSeekAuthError('DeepSeek login token is missing. Refresh chat.deepseek.com or sign in again.');
+    throw new DeepSeekAuthError(
+      options?.missingTokenMessage ?? 'DeepSeek login token is missing. Refresh chat.deepseek.com or sign in again.',
+    );
   }
 
   return {
@@ -231,6 +248,58 @@ export async function submitPromptStreaming(
   }
 
   return readCompletionStreamWithCallbacks(response, callbacks);
+}
+
+export async function readHistorySnapshot(
+  chatSessionId: string,
+  expectedAssistantMessageId: number,
+): Promise<DeepSeekHistorySnapshot | null> {
+  const clientHeaders = createClientHeaders();
+  const url = new URL(HISTORY_PATH, location.origin);
+  url.searchParams.set('chat_session_id', chatSessionId);
+  const response = await fetch(url.href, {
+    method: 'GET',
+    credentials: 'include',
+    headers: {
+      accept: 'application/json',
+      ...clientHeaders,
+    },
+  });
+  if (!response.ok) return null;
+
+  const json = await response.json();
+  const data = json?.data?.biz_data ?? json?.data ?? json?.biz_data ?? json;
+  const rawMessages: unknown[] = Array.isArray(data?.chat_messages) ? data.chat_messages : [];
+  if (rawMessages.length === 0) return null;
+
+  const messages = rawMessages
+    .map((message: unknown) => normalizeHistoryMessage(message))
+    .filter((message: DeepSeekHistoryMessage): message is DeepSeekHistoryMessage => message.id !== null);
+  if (messages.length === 0) return null;
+
+  const expected = messages.find((message) => message.id === expectedAssistantMessageId);
+  const latestAssistant =
+    expected ??
+    [...messages].reverse().find((message) => message.role !== 'user') ??
+    messages[messages.length - 1];
+
+  return {
+    chatSessionId,
+    parentMessageId: latestAssistant.id,
+    assistantMessageId: latestAssistant.id,
+    messageCount: messages.length,
+    verifiedAt: Date.now(),
+  };
+}
+
+export function normalizeMessageId(value: unknown, fieldName = 'message_id'): number | null {
+  const id = coerceMessageId(value);
+  if (id !== null || value === null || value === undefined || value === '') return id;
+  throw new DeepSeekPayloadError(`DeepSeek ${fieldName} must be a u32 number, received ${JSON.stringify(value)}.`);
+}
+
+export function buildDeepSeekSessionUrl(chatSessionId: string): string {
+  return `${location.origin}/a/chat/s/${chatSessionId}`;
 }
 
 async function readCompletionStream(response: Response): Promise<ModelTurn> {
@@ -339,6 +408,15 @@ function collectMessageIds(parsed: unknown, summary: ModelTurn) {
   } else if (value.v && typeof value.v === 'object') {
     collectMessageIds(value.v, summary);
   }
+}
+
+function normalizeHistoryMessage(raw: unknown): DeepSeekHistoryMessage {
+  const value = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  return {
+    id: firstMessageId(value.message_id, value.id, value.uuid),
+    parentId: firstMessageId(value.parent_id, value.parent_message_id, value.parentMessageId),
+    role: firstString(value.message_role, value.role)?.toLowerCase() ?? null,
+  };
 }
 
 function readDeepSeekUserToken(): string | null {

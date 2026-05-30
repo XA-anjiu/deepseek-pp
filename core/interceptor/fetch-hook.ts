@@ -1,4 +1,4 @@
-import { DEEPSEEK_API_URL, DPP_MANAGED_AGENT_PROMPT_MARKER, PRESET_REINJECTION_INTERVAL } from '../constants';
+import { DEEPSEEK_API_URL, PRESET_REINJECTION_INTERVAL } from '../constants';
 import { rememberDeepSeekClientHeaders } from '../deepseek/adapter';
 import type { Memory, ModelType, SystemPromptPreset, ToolCall, ToolCallRestoreRecord, ToolDescriptor } from '../types';
 import { buildPromptAugmentation, sanitizeInternalPromptText } from '../prompt';
@@ -9,12 +9,12 @@ import {
   createToolInvocationCatalog,
   getToolCloseTag,
   getToolOpenTag,
-  hasXmlToolMarker,
   type ToolInvocationCatalog,
 } from '../tool';
-import { estimateTokenUnits } from '../token/estimator';
+import { stripToolCallsFromHistory, stripToolCallsFromIDBResult } from './history-cleanup';
 import { extractResponseTextFromParsed, isResponseTextPatchPath, isStreamFinishedFromParsed, isThinkingPatchPath, parseSSEChunk, parseSSEData } from './sse-parser';
-import { extractToolCalls, stripToolCalls } from './tool-parser';
+import { createResponseTokenSpeedTracker, type ResponseTokenSpeedPayload } from './token-speed';
+import { extractToolCalls } from './tool-parser';
 
 const COMPLETION_PATH = new URL(DEEPSEEK_API_URL).pathname;
 const REGENERATE_PATH = '/api/v0/chat/regenerate';
@@ -90,13 +90,7 @@ export interface ResponseCompletePayload {
   };
 }
 
-export interface ResponseTokenSpeedPayload {
-  active: boolean;
-  estimatedTokens: number;
-  tokensPerSecond: number;
-  elapsedMs: number;
-  textLength: number;
-}
+export type { ResponseTokenSpeedPayload } from './token-speed';
 
 interface RequestContext {
   originalPrompt: string;
@@ -604,59 +598,6 @@ function collectAssistantMessageId(parsed: unknown, current: number | null): num
   return current;
 }
 
-function createResponseTokenSpeedTracker() {
-  const startedAt = performance.now();
-  let lastEmitAt = 0;
-  let totalTokenUnits = 0;
-  let textLength = 0;
-  let finished = false;
-  let tickTimer: ReturnType<typeof setInterval> | null = null;
-
-  const getAverageTokensPerSecond = (now: number): number => {
-    const elapsedMs = Math.max(now - startedAt, 1);
-    return totalTokenUnits / (elapsedMs / 1000);
-  };
-
-  const emit = (active: boolean, force = false) => {
-    if (finished && active) return;
-
-    const now = performance.now();
-    if (!force && now - lastEmitAt < TOKEN_SPEED_EMIT_INTERVAL_MS) return;
-    lastEmitAt = now;
-
-    const elapsedMs = Math.max(now - startedAt, 1);
-    hookState.onResponseTokenSpeed({
-      active,
-      estimatedTokens: Math.round(totalTokenUnits),
-      tokensPerSecond: getAverageTokensPerSecond(now),
-      elapsedMs: Math.round(elapsedMs),
-      textLength,
-    });
-  };
-
-  emit(true, true);
-  tickTimer = setInterval(() => emit(true, true), TOKEN_SPEED_EMIT_INTERVAL_MS);
-
-  return {
-    append(text: string) {
-      if (!text) return;
-      const tokenUnits = estimateTokenUnits(text);
-      textLength += text.length;
-      totalTokenUnits += tokenUnits;
-      emit(true);
-    },
-    finish() {
-      if (finished) return;
-      finished = true;
-      if (tickTimer !== null) {
-        clearInterval(tickTimer);
-        tickTimer = null;
-      }
-      emit(false, true);
-    },
-  };
-}
-
 function cloneParsedWithTextPrefix(parsed: any, keepChars: number): any | null {
   const cloned = JSON.parse(JSON.stringify(parsed));
   let remaining = Math.max(0, keepChars);
@@ -728,6 +669,7 @@ function cloneParsedWithTextSuffix(parsed: any, skipChars: number): any | null {
 
 class XmlToolStreamFilter {
   private catalog: ToolInvocationCatalog;
+  private toolInvocationNames: string[];
   private toolOpenTags: string[];
   private visiblePrompt: string;
   private state: 'NORMAL' | 'SUPPRESSING' = 'NORMAL';
@@ -741,12 +683,12 @@ class XmlToolStreamFilter {
     this.catalog = createToolInvocationCatalog(descriptors);
     this.visiblePrompt = visiblePrompt;
     // Always recognize shell tool names for filtering, even if not in descriptors
+    const invocationNames = [...this.catalog.invocationNames];
     for (const name of SHELL_TOOL_NAMES) {
-      if (!this.catalog.invocationNames.includes(name)) {
-        this.catalog.invocationNames.push(name);
-      }
+      if (!invocationNames.includes(name)) invocationNames.push(name);
     }
-    this.toolOpenTags = this.catalog.invocationNames.map(getToolOpenTag);
+    this.toolInvocationNames = invocationNames;
+    this.toolOpenTags = invocationNames.map(getToolOpenTag);
   }
 
   processChunk(chunk: string, controller: ReadableStreamDefaultController<Uint8Array>) {
@@ -922,7 +864,7 @@ class XmlToolStreamFilter {
 
   private findFirstToolOpen(text: string): { idx: number; tool: string } | null {
     let best: { idx: number; tool: string } | null = null;
-    for (const tool of this.catalog.invocationNames) {
+    for (const tool of this.toolInvocationNames) {
       const open = getToolOpenTag(tool);
       const idx = text.indexOf(open);
       if (idx >= 0 && (best === null || idx < best.idx)) {
@@ -985,7 +927,10 @@ async function interceptFetchResponse(
   let notifiedCount = 0;
   let textAccBuffer = '';
   let assistantMessageId: number | null = null;
-  const speedTracker = createResponseTokenSpeedTracker();
+  const speedTracker = createResponseTokenSpeedTracker(
+    hookState.onResponseTokenSpeed,
+    TOKEN_SPEED_EMIT_INTERVAL_MS,
+  );
 
   const processForFullText = (text: string) => {
     textAccBuffer += text;
@@ -1101,7 +1046,10 @@ function setupXHRResponseInterceptor(xhr: XMLHttpRequest, requestContext: Reques
   let assistantMessageId: number | null = null;
   const toolDescriptors = hookState.toolDescriptors;
   const filter = new XmlToolStreamFilter(toolDescriptors, requestContext.originalPrompt);
-  const speedTracker = createResponseTokenSpeedTracker();
+  const speedTracker = createResponseTokenSpeedTracker(
+    hookState.onResponseTokenSpeed,
+    TOKEN_SPEED_EMIT_INTERVAL_MS,
+  );
 
   const finalizeIfNeeded = () => {
     if (completed) return;
@@ -1185,7 +1133,7 @@ async function interceptHistoryResponse(responsePromise: Promise<Response>): Pro
 
   try {
     const json = await response.json();
-    stripToolCallsFromHistory(json);
+    stripToolCallsFromHistory(json, getHistoryCleanupOptions());
     return new Response(JSON.stringify(json), {
       headers: response.headers,
       status: response.status,
@@ -1209,7 +1157,7 @@ function setupXHRHistoryInterceptor(xhr: XMLHttpRequest) {
       if (cachedFiltered !== null) return cachedFiltered;
       try {
         const json = JSON.parse(raw);
-        stripToolCallsFromHistory(json);
+        stripToolCallsFromHistory(json, getHistoryCleanupOptions());
         cachedFiltered = JSON.stringify(json);
       } catch {
         cachedFiltered = raw;
@@ -1227,7 +1175,7 @@ function setupXHRHistoryInterceptor(xhr: XMLHttpRequest) {
         if (cachedFiltered !== null) return cachedFiltered;
         try {
           const json = JSON.parse(raw);
-          stripToolCallsFromHistory(json);
+          stripToolCallsFromHistory(json, getHistoryCleanupOptions());
           cachedFiltered = JSON.stringify(json);
         } catch {
           cachedFiltered = raw;
@@ -1239,119 +1187,11 @@ function setupXHRHistoryInterceptor(xhr: XMLHttpRequest) {
   });
 }
 
-function hasToolCallMarker(text: string): boolean {
-  const catalog = createToolInvocationCatalog(hookState.toolDescriptors);
-  if (hasXmlToolMarker(text, catalog)) return true;
-  // Legacy: also detect old DSML markers in historical data
-  return text.includes('｜DSML｜');
-}
-
-function hashString(value: string): string {
-  let hash = 0;
-  for (let i = 0; i < value.length; i++) {
-    hash = (hash * 31 + value.charCodeAt(i)) | 0;
-  }
-  return Math.abs(hash).toString(36);
-}
-
-function getMessageRestoreKey(msg: any, index: number): string {
-  return String(msg?.id ?? msg?.message_id ?? msg?.uuid ?? msg?.parent_message_id ?? index);
-}
-
-function collectToolCallRestoreRecord(text: string, key: string): ToolCallRestoreRecord | null {
-  if (!hasToolCallMarker(text)) return null;
-
-  const calls = extractToolCalls(text, { descriptors: hookState.toolDescriptors });
-  if (calls.length === 0) return null;
-
-  const content = stripToolCalls(text, { descriptors: hookState.toolDescriptors });
-  const id = hashString(`${key}\n${content}\n${calls.map((call) => call.raw).join('\n')}`);
+function getHistoryCleanupOptions() {
   return {
-    id,
-    calls,
-    content,
-    source: 'history',
+    toolDescriptors: hookState.toolDescriptors,
+    onToolCallsRestored: hookState.onToolCallsRestored,
   };
-}
-
-function sanitizeStoredMessageInternalPrompt(msg: any) {
-  if (!msg || typeof msg !== 'object') return;
-
-  if (typeof msg.content === 'string') {
-    msg.content = sanitizeInternalPromptText(msg.content);
-  }
-
-  if (!Array.isArray(msg.fragments)) return;
-
-  const textFragments = msg.fragments
-    .filter((frag: any) => frag && typeof frag.content === 'string');
-
-  if (textFragments.length === 0) return;
-
-  const joined = textFragments.map((frag: any) => frag.content).join('');
-  const sanitizedJoined = sanitizeInternalPromptText(joined);
-  if (sanitizedJoined !== joined) {
-    textFragments.forEach((frag: any, index: number) => {
-      frag.content = index === 0 ? sanitizedJoined : '';
-    });
-    return;
-  }
-
-  for (const frag of textFragments) {
-    frag.content = sanitizeInternalPromptText(frag.content);
-  }
-}
-
-function stripToolCallsFromHistory(json: any) {
-  if (!json || !json.data) return;
-  const data = json.data.biz_data || json.data;
-  const messages = data.chat_messages;
-  if (!Array.isArray(messages)) return;
-
-  const restoredRecords: ToolCallRestoreRecord[] = [];
-  const visibleMessages = messages.filter((msg: any) => !isInternalManagedAgentMessage(msg));
-  if (visibleMessages.length !== messages.length) {
-    data.chat_messages = visibleMessages;
-  }
-
-  visibleMessages.forEach((msg: any, index: number) => {
-    sanitizeStoredMessageInternalPrompt(msg);
-    const messageKey = getMessageRestoreKey(msg, index);
-    if (typeof msg.content === 'string' && hasToolCallMarker(msg.content)) {
-      const record = collectToolCallRestoreRecord(msg.content, `${messageKey}:content`);
-      if (record) restoredRecords.push(record);
-      msg.content = stripToolCalls(msg.content, { descriptors: hookState.toolDescriptors });
-    }
-    if (msg.fragments && Array.isArray(msg.fragments)) {
-      msg.fragments.forEach((frag: any, fragIndex: number) => {
-        if (typeof frag.content === 'string' && hasToolCallMarker(frag.content)) {
-          const record = collectToolCallRestoreRecord(frag.content, `${messageKey}:fragment:${fragIndex}`);
-          if (record) restoredRecords.push(record);
-          frag.content = stripToolCalls(frag.content, { descriptors: hookState.toolDescriptors });
-        }
-      });
-    }
-  });
-
-  if (restoredRecords.length > 0) {
-    hookState.onToolCallsRestored(restoredRecords);
-  }
-}
-
-function isInternalManagedAgentMessage(msg: any): boolean {
-  if (!msg || typeof msg !== 'object') return false;
-  if (typeof msg.content === 'string' && isInternalManagedAgentContent(msg.content)) return true;
-  if (!Array.isArray(msg.fragments)) return false;
-  return msg.fragments.some((frag: any) => typeof frag?.content === 'string' && isInternalManagedAgentContent(frag.content));
-}
-
-function isInternalManagedAgentContent(content: string): boolean {
-  if (content.includes(DPP_MANAGED_AGENT_PROMPT_MARKER)) return true;
-  if (content.includes('DeepSeek++ 托管 Agent Runner') && content.includes('<tool_results>')) return true;
-  return content.includes('Tool call format reminder:') &&
-    content.includes('Available tool tag names:') &&
-    content.includes('<original_user_task>') &&
-    content.includes('</original_user_task>');
 }
 
 // --- IndexedDB interception: strip tool-call blocks from cached messages ---
@@ -1388,56 +1228,9 @@ function patchIDBRequest(request: IDBRequest) {
       const result = origResultDesc.get!.call(this);
       if (result && !cleaned) {
         cleaned = true;
-        stripToolCallsFromIDBResult(result);
+        stripToolCallsFromIDBResult(result, getHistoryCleanupOptions());
       }
       return result;
     },
-  });
-}
-
-function stripToolCallsFromIDBResult(result: any) {
-  const restoredRecords: ToolCallRestoreRecord[] = [];
-
-  if (Array.isArray(result)) {
-    for (const item of result) {
-      stripSingleIDBRecord(item, restoredRecords);
-    }
-  } else {
-    stripSingleIDBRecord(result, restoredRecords);
-  }
-
-  if (restoredRecords.length > 0) {
-    hookState.onToolCallsRestored(restoredRecords);
-  }
-}
-
-function stripSingleIDBRecord(record: any, restoredRecords: ToolCallRestoreRecord[]) {
-  if (!record || !record.data) return;
-  const data = record.data;
-  const messages = data.chat_messages;
-  if (!Array.isArray(messages)) return;
-
-  const visibleMessages = messages.filter((msg: any) => !isInternalManagedAgentMessage(msg));
-  if (visibleMessages.length !== messages.length) {
-    data.chat_messages = visibleMessages;
-  }
-
-  visibleMessages.forEach((msg: any, index: number) => {
-    sanitizeStoredMessageInternalPrompt(msg);
-    const messageKey = getMessageRestoreKey(msg, index);
-    if (typeof msg.content === 'string' && hasToolCallMarker(msg.content)) {
-      const record = collectToolCallRestoreRecord(msg.content, `${messageKey}:content`);
-      if (record) restoredRecords.push(record);
-      msg.content = stripToolCalls(msg.content, { descriptors: hookState.toolDescriptors });
-    }
-    if (msg.fragments && Array.isArray(msg.fragments)) {
-      msg.fragments.forEach((frag: any, fragIndex: number) => {
-        if (typeof frag.content === 'string' && hasToolCallMarker(frag.content)) {
-          const record = collectToolCallRestoreRecord(frag.content, `${messageKey}:fragment:${fragIndex}`);
-          if (record) restoredRecords.push(record);
-          frag.content = stripToolCalls(frag.content, { descriptors: hookState.toolDescriptors });
-        }
-      });
-    }
   });
 }

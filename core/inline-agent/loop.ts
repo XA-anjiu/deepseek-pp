@@ -6,6 +6,7 @@ import {
   type SubmitPromptInput,
 } from '../deepseek/adapter';
 import { extractToolCalls, stripToolCalls } from '../interceptor/tool-parser';
+import { executeToolCallsSequentially } from '../tool-loop/engine';
 import type { ToolCall, ToolDescriptor, ToolExecutionRecord } from '../types';
 import type { ToolParsingInput } from '../tool/invocation';
 import {
@@ -199,7 +200,7 @@ export async function runInlineAgentLoop(
           break;
         }
 
-        const nudgeExecs = await executeToolCalls(nudgeToolCalls, executeTool, signal);
+        const nudgeExecs = await executeToolCallsSequentially(nudgeToolCalls, executeTool, { signal });
         allExecutions = [...allExecutions, ...nudgeExecs];
         totalTools += nudgeExecs.length;
 
@@ -216,7 +217,7 @@ export async function runInlineAgentLoop(
       }
 
       nudgeCount = 0;
-      const stepExecs = await executeToolCalls(toolCalls, executeTool, signal);
+      const stepExecs = await executeToolCallsSequentially(toolCalls, executeTool, { signal });
       allExecutions = [...allExecutions, ...stepExecs];
       totalTools += stepExecs.length;
 
@@ -324,20 +325,6 @@ export async function runInlineAgentLoop(
       error: err instanceof Error ? err.message : String(err),
     } satisfies InlineAgentLoopErrorMsg);
   }
-}
-
-async function executeToolCalls(
-  calls: ToolCall[],
-  executeTool: ExecuteToolFn,
-  signal: AbortSignal,
-): Promise<ToolExecutionRecord[]> {
-  const results: ToolExecutionRecord[] = [];
-  for (const call of calls) {
-    if (signal.aborted) break;
-    const record = await executeTool(call);
-    results.push(record);
-  }
-  return results;
 }
 
 function waitBetweenDeepSeekRequests(signal: AbortSignal): Promise<void> {
