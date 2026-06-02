@@ -8,7 +8,24 @@ import {
   replaceAllMemories,
   archiveStaleMemories,
 } from '../core/memory/store';
-import { getAllSkills, saveSkill, deleteSkill, replaceAllCustomSkills } from '../core/skill/registry';
+import {
+  deleteGitHubSkillSource,
+  getAllSkillSources,
+  getAllSkills,
+  getSkillLibrary,
+  getUserSkills,
+  replaceAllCustomSkills,
+  replaceAllSkillSources,
+  saveSkill,
+  setSkillEnabled,
+  deleteSkill,
+} from '../core/skill/registry';
+import {
+  checkGitHubSkillSourceUpdates,
+  importGitHubSkillSource,
+  previewGitHubSkillSource,
+  updateGitHubSkillSource,
+} from '../core/skill/github-importer';
 import {
   getAllPresets,
   savePreset,
@@ -43,7 +60,7 @@ import { getMcpOriginPattern, requestMcpServerOriginPermission } from '../core/m
 import { SHELL_MCP_NATIVE_HOST, SHELL_MCP_SERVER_NAME, createShellMcpPresetInput } from '../core/shell';
 import { getWebToolSettings, setWebToolEnabled } from '../core/tool/web-settings';
 import type { WebSearchToolName } from '../core/tool/web-search';
-import type { BackgroundConfig, DeepSeekTheme, Memory, ModelType, NewMemory, PetConfig, Skill, SyncConfig, SyncCounts, SystemPromptPreset, ToolCall, ToolResult } from '../core/types';
+import type { BackgroundConfig, DeepSeekTheme, GitHubSkillImportRequest, GitHubSkillSource, Memory, ModelType, NewMemory, PetConfig, Skill, SyncConfig, SyncCounts, SystemPromptPreset, ToolCall, ToolResult } from '../core/types';
 import type { McpServerCreateInput, McpServerUpdateInput } from '../core/mcp/types';
 
 const DEEPSEEK_HOME_URL = 'https://chat.deepseek.com/';
@@ -54,6 +71,7 @@ type SidePanelApi = {
 type SyncDataSnapshot = {
   memories: Omit<Memory, 'id'>[];
   skills: Skill[];
+  skillSources: GitHubSkillSource[];
   presets: SystemPromptPreset[];
 };
 
@@ -165,6 +183,12 @@ async function handleMessage(
     case 'GET_SKILLS':
       return getAllSkills();
 
+    case 'GET_SKILL_LIBRARY':
+      return getSkillLibrary();
+
+    case 'GET_GITHUB_SKILL_SOURCES':
+      return getAllSkillSources();
+
     case 'SAVE_SKILL': {
       const payload = message.payload as Skill | { skill: Skill; previousName?: string };
       const { skill, previousName } = 'skill' in payload ? payload : { skill: payload, previousName: undefined };
@@ -176,6 +200,43 @@ async function handleMessage(
     case 'DELETE_SKILL': {
       const { name } = message.payload as { name: string };
       await deleteSkill(name);
+      await broadcastStateUpdate(sender.tab?.id);
+      return { ok: true };
+    }
+
+    case 'SET_SKILL_ENABLED': {
+      const { name, enabled } = message.payload as { name: string; enabled: boolean };
+      await setSkillEnabled(name, enabled);
+      await broadcastStateUpdate(sender.tab?.id);
+      return { ok: true };
+    }
+
+    case 'PREVIEW_GITHUB_SKILL_SOURCE': {
+      const { url } = message.payload as { url: string };
+      return previewGitHubSkillSource(url);
+    }
+
+    case 'IMPORT_GITHUB_SKILL_SOURCE': {
+      const result = await importGitHubSkillSource(message.payload as GitHubSkillImportRequest);
+      await broadcastStateUpdate(sender.tab?.id);
+      return result;
+    }
+
+    case 'CHECK_GITHUB_SKILL_SOURCE_UPDATES': {
+      const { sourceId } = message.payload as { sourceId: string };
+      return checkGitHubSkillSourceUpdates(sourceId);
+    }
+
+    case 'UPDATE_GITHUB_SKILL_SOURCE': {
+      const { sourceId } = message.payload as { sourceId: string };
+      const result = await updateGitHubSkillSource(sourceId);
+      await broadcastStateUpdate(sender.tab?.id);
+      return result;
+    }
+
+    case 'DELETE_GITHUB_SKILL_SOURCE': {
+      const { sourceId } = message.payload as { sourceId: string };
+      await deleteGitHubSkillSource(sourceId);
       await broadcastStateUpdate(sender.tab?.id);
       return { ok: true };
     }
@@ -454,6 +515,7 @@ async function handleMessage(
       await Promise.all([
         replaceAllMemories(snapshot.memories),
         replaceAllCustomSkills(snapshot.skills),
+        replaceAllSkillSources(snapshot.skillSources),
         replaceAllPresets(snapshot.presets),
       ]);
 
@@ -519,15 +581,17 @@ async function broadcastToolCallHistoryUpdate(excludeTabId?: number) {
 }
 
 async function getLocalSyncDataSnapshot(): Promise<SyncDataSnapshot> {
-  const [memories, allSkills, presets] = await Promise.all([
+  const [memories, userSkills, skillSources, presets] = await Promise.all([
     getAllMemories(),
-    getAllSkills(),
+    getUserSkills(),
+    getAllSkillSources(),
     getAllPresets(),
   ]);
 
   return {
     memories: memories.map(({ id, ...memory }) => memory),
-    skills: allSkills.filter((skill) => skill.source === 'custom'),
+    skills: userSkills,
+    skillSources,
     presets,
   };
 }
@@ -536,15 +600,17 @@ async function uploadSyncDataSnapshot(config: SyncConfig, snapshot: SyncDataSnap
   await Promise.all([
     webdavPut(config, 'memories.json', JSON.stringify(snapshot.memories)),
     webdavPut(config, 'skills.json', JSON.stringify(snapshot.skills)),
+    webdavPut(config, 'skill-sources.json', JSON.stringify(snapshot.skillSources)),
     webdavPut(config, 'presets.json', JSON.stringify(snapshot.presets)),
   ]);
 }
 
 async function getRemoteSyncDataSnapshot(config: SyncConfig): Promise<SyncDataSnapshot> {
-  const [remoteMemJson, remoteSkillJson, remotePresetJson] = await Promise.all([
+  const [remoteMemJson, remoteSkillJson, remotePresetJson, remoteSkillSourceJson] = await Promise.all([
     webdavGetRequired(config, 'memories.json'),
     webdavGetRequired(config, 'skills.json'),
     webdavGetRequired(config, 'presets.json'),
+    webdavGet(config, 'skill-sources.json'),
   ]);
 
   const memories = parseRemoteArray<Memory>('memories.json', remoteMemJson)
@@ -553,6 +619,9 @@ async function getRemoteSyncDataSnapshot(config: SyncConfig): Promise<SyncDataSn
   return {
     memories,
     skills: parseRemoteArray<Skill>('skills.json', remoteSkillJson),
+    skillSources: remoteSkillSourceJson === null
+      ? []
+      : parseRemoteArray<GitHubSkillSource>('skill-sources.json', remoteSkillSourceJson),
     presets: parseRemoteArray<SystemPromptPreset>('presets.json', remotePresetJson),
   };
 }

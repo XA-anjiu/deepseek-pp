@@ -107,6 +107,9 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
 
 - **内置技能** — 预设多组开箱即用的技能，包含通用协作技能和 OfficeCLI 官方文档技能
 - **自定义技能** — 在侧边栏创建专属技能，定义系统指令和参数
+- **GitHub 导入** — 支持从 GitHub 仓库、目录或单个 `SKILL.md` 链接预览并导入第三方 Skill
+- **来源与更新** — GitHub 导入的 Skill 会显示来源仓库、版本、license、同步时间，并支持检查和同步上游更新
+- **启用控制** — 自定义和 GitHub 导入的 Skill 可以单独启用、停用或删除，不影响本地其他 Skill
 - **`/` 触发** — 在聊天框输入 `/` 弹出自动补全面板，选择技能后自动注入对应的 system prompt
 - **记忆联动** — 技能可选择是否同时注入记忆上下文
 

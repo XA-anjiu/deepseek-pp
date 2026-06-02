@@ -32,6 +32,7 @@ export default function SkillForm({ initialSkill, onSave, onCancel }: Props) {
       instructions: instructions.trim(),
       source: 'custom',
       memoryEnabled,
+      enabled: initialSkill?.enabled !== false,
     });
   };
 
