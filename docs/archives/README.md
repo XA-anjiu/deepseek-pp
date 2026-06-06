@@ -1,5 +1,13 @@
 ## Archived Spec-Driven Work
 
+### audit-remediation
+
+- Description: Full remediation of `audit-report-deepseek-pp-2026-06-05.html`, covering privileged-boundary hardening, runtime schema validation, MCP response limits, release ref integrity, regression tests, and bundle cleanup.
+- Date range: 2026-06-05 - 2026-06-05
+- Tracking mode: LOCAL_ONLY
+- Archived progress: [MASTER.md](audit-remediation/progress/MASTER.md)
+- GitHub repository: `zhu1090093659/deepseek-pp`
+
 ### deepseek-automation
 
 - Description: Browser-local Codex-style automations for DeepSeek++ with run-now sessions and scheduled continuation in the same automation chat.

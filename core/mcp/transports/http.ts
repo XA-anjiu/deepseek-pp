@@ -16,10 +16,10 @@ import {
 export function createMcpHttpTransport(server: McpServerConfig): McpProtocolTransport {
   return {
     request(request, options) {
-      return sendHttpMessage(server, request, options?.timeoutMs);
+      return sendHttpMessage(server, request, options?.timeoutMs, options?.maxResponseBytes);
     },
     async notify(notification, options) {
-      await sendHttpMessage(server, notification, options?.timeoutMs);
+      await sendHttpMessage(server, notification, options?.timeoutMs, options?.maxResponseBytes);
     },
   };
 }
@@ -32,6 +32,7 @@ async function sendHttpMessage<TParams extends Record<string, unknown> | undefin
   server: McpServerConfig,
   message: McpJsonRpcRequest<TParams> | McpJsonRpcNotification,
   timeoutMs: number = server.timeouts.requestMs,
+  maxResponseBytes: number = server.limits.maxResultBytes,
 ): Promise<McpJsonRpcResponse<TResult>> {
   await ensureMcpServerOriginPermission(server);
   const url = getMcpEndpointUrl(server);
@@ -49,5 +50,6 @@ async function sendHttpMessage<TParams extends Record<string, unknown> | undefin
   return readJsonRpcResponse<TResult>(
     response,
     'id' in message ? message as McpJsonRpcRequest<TParams> : undefined,
+    { maxBytes: maxResponseBytes },
   );
 }

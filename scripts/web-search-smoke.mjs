@@ -41,7 +41,7 @@ const WEB_SEARCH_TOOL_DESCRIPTORS = [
       properties: { url: { type: 'string', description: '完整 URL' } },
       required: ['url'],
     },
-    execution: { mode: 'auto', enabled: true, risk: 'low' },
+    execution: { mode: 'manual', enabled: true, risk: 'medium' },
   },
 ];
 

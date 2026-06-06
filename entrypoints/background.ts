@@ -41,6 +41,13 @@ import { getPetConfig, savePetConfig, clearPetConfig } from '../core/pet/store';
 import { getExtensionVersion } from '../core/version';
 import { getSyncConfig, saveSyncConfig } from '../core/sync/config';
 import { webdavTest, webdavMkcol, webdavGet, webdavPut } from '../core/sync/webdav-client';
+import {
+  parseValidatedArray,
+  validateGitHubSkillSource,
+  validatePreset,
+  validateSkill,
+  validateStoredMemory,
+} from '../core/sync/schema';
 import { clearToolCallHistory, getToolCallHistory } from '../core/tool/history';
 import {
   executeRuntimeToolCall,
@@ -921,16 +928,19 @@ async function getRemoteSyncDataSnapshot(config: SyncConfig): Promise<SyncDataSn
     webdavGet(config, 'skill-sources.json'),
   ]);
 
-  const memories = parseRemoteArray<Memory>('memories.json', remoteMemJson)
-    .map(({ id, ...memory }) => memory);
+  const memories = parseValidatedArray('memories.json', remoteMemJson, (item, path) => {
+    if (!item || typeof item !== 'object') throw new Error(`${path} must be an object`);
+    const { id: _id, ...memory } = item as Memory;
+    return validateStoredMemory(memory, path);
+  });
 
   return {
     memories,
-    skills: parseRemoteArray<Skill>('skills.json', remoteSkillJson),
+    skills: parseValidatedArray('skills.json', remoteSkillJson, validateSkill),
     skillSources: remoteSkillSourceJson === null
       ? []
-      : parseRemoteArray<GitHubSkillSource>('skill-sources.json', remoteSkillSourceJson),
-    presets: parseRemoteArray<SystemPromptPreset>('presets.json', remotePresetJson),
+      : parseValidatedArray('skill-sources.json', remoteSkillSourceJson, validateGitHubSkillSource),
+    presets: parseValidatedArray('presets.json', remotePresetJson, validatePreset),
   };
 }
 
@@ -940,21 +950,6 @@ async function webdavGetRequired(config: SyncConfig, file: string): Promise<stri
     throw new Error(`云端缺少 ${file}，已停止下载以避免覆盖本地数据`);
   }
   return content;
-}
-
-function parseRemoteArray<T>(file: string, content: string): T[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    throw new Error(`云端 ${file} 不是有效 JSON，已停止下载`);
-  }
-
-  if (!Array.isArray(parsed)) {
-    throw new Error(`云端 ${file} 格式错误，应为数组，已停止下载`);
-  }
-
-  return parsed as T[];
 }
 
 function getSyncCounts(snapshot: SyncDataSnapshot): SyncCounts {

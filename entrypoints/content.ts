@@ -18,9 +18,10 @@ import { pickPetLine, type PetState } from '../core/pet/lines';
 import { DEFAULT_TOOL_DESCRIPTORS, createToolInvocationCatalog } from '../core/tool/invocation';
 import { normalizeBackgroundConfig } from '../core/background/config';
 import { stripToolCalls } from '../core/interceptor/tool-parser';
+import { augmentRequestBody } from '../core/interceptor/request-augmentation';
 import { containsInternalPromptMarker, sanitizeInternalPromptText } from '../core/prompt';
-import { SHELL_TOOL_NAMES } from '../core/shell';
 import type { ResponseCompletePayload, ResponseTokenSpeedPayload } from '../core/interceptor/fetch-hook';
+import { runInlineAgentLoop } from '../core/inline-agent/loop';
 import type {
   InlineAgentStartPayload,
   InlineAgentStreamChunkMsg,
@@ -39,6 +40,7 @@ import {
   addToolResultToStep,
   createAgentFooter,
 } from '../core/inline-agent/renderer';
+import { renderInlineMarkdown } from '../core/inline-agent/markdown';
 
 import { createClientHeaders, rememberDeepSeekClientHeaders, saveClientHeadersToStorage } from '../core/deepseek/adapter';
 
@@ -71,6 +73,11 @@ const PET_FEEDBACK_DELAY_MS = 1400;
 const PET_SLEEP_DELAY_MS = 12000;
 const PET_SPRITE_PATH = 'pet/deepseek-whale-pet-states.png';
 const DEEPSEEK_POW_WASM_PATH = 'deepseek/sha3_wasm_bg.wasm';
+const MAIN_WORLD_SOURCE = 'deepseek-pp-main';
+const CONTENT_SOURCE = 'deepseek-pp-content';
+const BRIDGE_REQUEST_TYPE = 'DPP_BRIDGE_REQUEST';
+const BRIDGE_INIT_TYPE = 'DPP_BRIDGE_INIT';
+const BRIDGE_READY_TYPE = 'DPP_BRIDGE_READY';
 const PET_BUBBLE_VISIBLE_MS = 6000;
 const PET_BUBBLE_REPEAT_MIN_MS = 8000;
 const PET_BUBBLE_REPEAT_MAX_MS = 12000;
@@ -148,6 +155,10 @@ let currentSkills: Skill[] = [];
 let currentActivePreset: SystemPromptPreset | null = null;
 let currentModelType: ModelType = null;
 let currentToolDescriptors: ToolDescriptor[] = [...DEFAULT_TOOL_DESCRIPTORS];
+let currentRequestMessageCount = 0;
+let mainWorldPort: MessagePort | null = null;
+let mainWorldBridgeReady = false;
+let activeAgentAbort: AbortController | null = null;
 let toolOpenTagRe = buildToolOpenTagRegex(currentToolDescriptors);
 let toolMarkerRe = buildToolMarkerRegex(currentToolDescriptors);
 let extensionContextValid = true;
@@ -157,43 +168,24 @@ export default defineContentScript({
   runAt: 'document_start',
   async main() {
     installExtensionInvalidationGuards();
+    installMainWorldBridge();
 
-    const handleMainWorldMessage = async (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.source !== 'deepseek-pp-main') return;
-
+    const handleMainWorldMessage = async (data: any) => {
+      if (data?.source !== MAIN_WORLD_SOURCE) return;
       try {
-        switch (event.data.type) {
+        switch (data.type) {
           case 'TOOL_CALL': {
-            const call = event.data.data as ToolCall;
+            const call = data.data as ToolCall;
             setPetState('working');
             void runToolExecution(call);
             break;
           }
-          case 'EXECUTE_TOOL_CALL': {
-            const call = event.data.data as ToolCall;
-            const id = event.data.id as string;
-            setPetState('working');
-            const result = await executeToolCall(call).catch((err): ToolCardResult => ({
-              ok: false,
-              summary: '执行失败',
-              detail: err instanceof Error ? err.message : String(err),
-            }));
-            showPetResult(result);
-            window.postMessage({
-              source: 'deepseek-pp-content',
-              type: 'TOOL_CALL_RESULT',
-              id,
-              result,
-            });
-            break;
-          }
           case 'RESTORE_TOOL_CALLS': {
-            rememberRestoredToolRecords(event.data.records as ToolCallRestoreRecord[]);
+            rememberRestoredToolRecords(data.records as ToolCallRestoreRecord[]);
             break;
           }
           case 'MEMORIES_USED': {
-            const ids = event.data.ids as number[];
+            const ids = data.ids as number[];
             await sendRuntimeMessage({ type: 'TOUCH_MEMORIES', payload: { ids } });
             break;
           }
@@ -202,7 +194,7 @@ export default defineContentScript({
             break;
           }
           case 'RESPONSE_COMPLETE': {
-            const complete = normalizeResponseCompletePayload(event.data.payload, event.data.text);
+            const complete = normalizeResponseCompletePayload(data.payload, data.text);
             const gen = ++responseGeneration;
             await waitForPendingToolExecutions();
             if (gen !== responseGeneration) break;
@@ -218,41 +210,11 @@ export default defineContentScript({
             break;
           }
           case 'RESPONSE_TOKEN_SPEED': {
-            const progress = normalizeResponseTokenSpeedPayload(event.data.payload);
+            const progress = normalizeResponseTokenSpeedPayload(data.payload);
             if (progress) {
               updateTokenSpeedIndicator(progress);
               updatePetFromTokenSpeed(progress);
             }
-            break;
-          }
-          case 'AGENT_STEP_STARTED': {
-            setPetState('working');
-            handleAgentStepStarted(event.data.data);
-            break;
-          }
-          case 'AGENT_STREAM_CHUNK': {
-            setPetState('speaking');
-            handleAgentStreamChunk(event.data.data as InlineAgentStreamChunkMsg);
-            break;
-          }
-          case 'AGENT_TOOL_DETECTED': {
-            break;
-          }
-          case 'AGENT_STEP_COMPLETE': {
-            handleAgentStepComplete(event.data.data as InlineAgentStepCompleteMsg);
-            schedulePetIdle();
-            break;
-          }
-          case 'AGENT_LOOP_COMPLETE': {
-            handleAgentLoopComplete(event.data.data as InlineAgentLoopCompleteMsg);
-            setPetState('success');
-            schedulePetIdle(PET_FEEDBACK_DELAY_MS);
-            break;
-          }
-          case 'AGENT_LOOP_ERROR': {
-            setPetState('error');
-            handleAgentLoopError(event.data.data as InlineAgentLoopErrorMsg);
-            schedulePetIdle(PET_FEEDBACK_DELAY_MS);
             break;
           }
         }
@@ -263,7 +225,7 @@ export default defineContentScript({
       }
     };
 
-    window.addEventListener('message', handleMainWorldMessage);
+    setMainWorldMessageHandler(handleMainWorldMessage);
 
     void loadAndSyncRuntimeState().catch(() => undefined);
 
@@ -306,6 +268,114 @@ export default defineContentScript({
     });
   },
 });
+
+let mainWorldMessageHandler: ((data: any) => void | Promise<void>) | null = null;
+const pendingMainWorldMessages: Record<string, unknown>[] = [];
+
+function setMainWorldMessageHandler(handler: (data: any) => void | Promise<void>): void {
+  mainWorldMessageHandler = handler;
+}
+
+function installMainWorldBridge(): void {
+  window.addEventListener('message', (event) => {
+    if (event.origin !== window.location.origin) return;
+    if (event.data?.source !== MAIN_WORLD_SOURCE || event.data.type !== BRIDGE_REQUEST_TYPE) return;
+    connectMainWorldPort();
+  });
+}
+
+function connectMainWorldPort(): void {
+  if (mainWorldPort) return;
+
+  const channel = new MessageChannel();
+  mainWorldPort = channel.port1;
+  mainWorldPort.onmessage = (event) => {
+    void handleMainWorldPortMessage(event.data);
+  };
+  mainWorldPort.start();
+
+  window.postMessage(
+    { source: CONTENT_SOURCE, type: BRIDGE_INIT_TYPE },
+    window.location.origin,
+    [channel.port2],
+  );
+}
+
+async function handleMainWorldPortMessage(data: any): Promise<void> {
+  if (data?.source !== MAIN_WORLD_SOURCE) return;
+
+  if (data.type === BRIDGE_READY_TYPE) {
+    mainWorldBridgeReady = true;
+    flushMainWorldMessages();
+    return;
+  }
+
+  if (data.type === 'AUGMENT_REQUEST_BODY') {
+    await handleAugmentRequestBody(data);
+    return;
+  }
+
+  await mainWorldMessageHandler?.(data);
+}
+
+async function handleAugmentRequestBody(data: { id?: unknown; body?: unknown }): Promise<void> {
+  const id = typeof data.id === 'string' ? data.id : '';
+  if (!id) return;
+
+  try {
+    if (typeof data.body !== 'string') {
+      throw new Error('Request body must be a string.');
+    }
+
+    const result = augmentRequestBody(data.body, {
+      memories: currentMemories,
+      skills: currentSkills,
+      activePreset: currentActivePreset,
+      modelType: currentModelType,
+      toolDescriptors: currentToolDescriptors,
+      messageCount: currentRequestMessageCount,
+    });
+
+    if (result) {
+      currentRequestMessageCount = result.messageCount;
+      if (result.usedMemoryIds.length > 0) {
+        await sendRuntimeMessage({ type: 'TOUCH_MEMORIES', payload: { ids: result.usedMemoryIds } });
+      }
+    }
+
+    postToMainWorld({
+      type: 'AUGMENT_REQUEST_BODY_RESULT',
+      id,
+      ok: true,
+      result: result
+        ? { body: result.body, agentTaskPrompt: result.agentTaskPrompt }
+        : null,
+    });
+  } catch (error) {
+    postToMainWorld({
+      type: 'AUGMENT_REQUEST_BODY_RESULT',
+      id,
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function postToMainWorld(message: Record<string, unknown>): void {
+  if (!mainWorldPort || !mainWorldBridgeReady) {
+    pendingMainWorldMessages.push(message);
+    return;
+  }
+  mainWorldPort.postMessage({ source: CONTENT_SOURCE, ...message });
+}
+
+function flushMainWorldMessages(): void {
+  if (!mainWorldPort || !mainWorldBridgeReady) return;
+  while (pendingMainWorldMessages.length > 0) {
+    const message = pendingMainWorldMessages.shift()!;
+    mainWorldPort.postMessage({ source: CONTENT_SOURCE, ...message });
+  }
+}
 
 async function loadAndSyncRuntimeState() {
   const [memories, skills, activePreset, modelType, toolDescriptors] = await Promise.all([
@@ -725,11 +795,7 @@ function startInlineAgentIfNeeded(
   });
   inlineAgentContainerObserver.observe(responseHost, { childList: true });
 
-  window.postMessage({
-    source: 'deepseek-pp-content',
-    type: 'START_INLINE_AGENT_LOOP',
-    payload,
-  });
+  void startInlineAgentLoop(payload);
 }
 
 function stopInlineAgent(): void {
@@ -745,10 +811,78 @@ function stopInlineAgent(): void {
   activeInlineAgentTrace = null;
   inlineAgentContainerObserver?.disconnect();
   inlineAgentContainerObserver = null;
-  window.postMessage({ source: 'deepseek-pp-content', type: 'STOP_INLINE_AGENT_LOOP' });
+  activeAgentAbort?.abort();
+  activeAgentAbort = null;
   if (container) {
     const footer = createAgentFooter(0, 0, false, '已停止');
     container.appendChild(footer);
+  }
+}
+
+async function startInlineAgentLoop(payload: InlineAgentStartPayload): Promise<void> {
+  activeAgentAbort?.abort();
+  const abort = new AbortController();
+  activeAgentAbort = abort;
+
+  const post = (type: string, data: unknown) => {
+    handleInlineAgentLoopEvent(type, data);
+  };
+
+  const executeTool = async (call: ToolCall): Promise<ToolExecutionRecord> => {
+    const enrichedCall: ToolCall = {
+      ...call,
+      source: {
+        trigger: 'agent_run',
+        chatSessionId: payload.chatSessionId,
+        runId: payload.loopId,
+      },
+    };
+    const result = await executeToolCall(enrichedCall);
+    return {
+      name: call.name,
+      result: {
+        ok: result.ok,
+        summary: result.summary,
+        detail: result.detail,
+        output: result.output,
+        error: result.error,
+        truncated: result.truncated,
+      },
+      provider: call.provider,
+      descriptorId: call.descriptorId,
+    };
+  };
+
+  await runInlineAgentLoop(payload, { post, executeTool, signal: abort.signal });
+  if (activeAgentAbort === abort) activeAgentAbort = null;
+}
+
+function handleInlineAgentLoopEvent(type: string, data: unknown): void {
+  switch (type) {
+    case 'AGENT_STEP_STARTED':
+      setPetState('working');
+      handleAgentStepStarted(data as { loopId: string; stepIndex: number });
+      break;
+    case 'AGENT_STREAM_CHUNK':
+      setPetState('speaking');
+      handleAgentStreamChunk(data as InlineAgentStreamChunkMsg);
+      break;
+    case 'AGENT_TOOL_DETECTED':
+      break;
+    case 'AGENT_STEP_COMPLETE':
+      handleAgentStepComplete(data as InlineAgentStepCompleteMsg);
+      schedulePetIdle();
+      break;
+    case 'AGENT_LOOP_COMPLETE':
+      handleAgentLoopComplete(data as InlineAgentLoopCompleteMsg);
+      setPetState('success');
+      schedulePetIdle(PET_FEEDBACK_DELAY_MS);
+      break;
+    case 'AGENT_LOOP_ERROR':
+      setPetState('error');
+      handleAgentLoopError(data as InlineAgentLoopErrorMsg);
+      schedulePetIdle(PET_FEEDBACK_DELAY_MS);
+      break;
   }
 }
 
@@ -867,83 +1001,10 @@ function appendInlineAgentFinalAnswer(container: HTMLElement, text: string, loop
   if (!parent) return;
 
   const textDiv = document.createElement('div');
-  textDiv.innerHTML = renderMarkdown(text);
+  textDiv.innerHTML = renderInlineMarkdown(text);
   textDiv.setAttribute('data-dpp-body-text', 'true');
   textDiv.setAttribute('data-dpp-agent-loop-id', loopId);
   parent.appendChild(textDiv);
-}
-
-
-
-/**
- * Lightweight inline Markdown → HTML renderer.
- * Covers bold, italic, code (inline + block), links, and line breaks.
- * IMPORTANT: order matters — run patterns from most-specific to least-specific
- * to avoid re-processing generated HTML.
- */
-function renderMarkdown(text: string): string {
-  try {
-    // 1. Escape HTML entities first (safety)
-    let html = text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-
-    // 2. Code blocks (```...```) — before inline code to avoid ` inside blocks
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, _lang, code) => {
-      const inner = code.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return `<pre><code>${inner}</code></pre>`;
-    });
-
-    // 3. Inline code (`code`)
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-    // 4. Bold (**text**) — before italic so ** is not mistaken for *
-    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-
-    // 5. Italic (*text*)
-    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-
-    // 6. Links [text](url)
-    html = html.replace(
-      /\[([^\]]+)\]\(([^)]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
-    );
-
-    // 7. Headings (### / ## / #)
-    html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
-    html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
-    html = html.replace(/^# (.+)$/gm, '<h2>$1</h2>');
-
-    // 8. Unordered lists: "- " or "* " at line start
-    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
-    html = html.replace(/^\* (.+)$/gm, '<li>$1</li>');
-    html = html.replace(/((?:<li>.*?<\/li>\n?)+)/g, '<ul>$1</ul>');
-
-    // 9. Ordered lists: "1. " etc.
-    html = html.replace(/^\d+\.\s+(.+)$/gm, '<ol><li>$1</li></ol>');
-    // Merge consecutive <ol> blocks
-    html = html.replace(/<\/ol>\s*<ol>/g, '');
-
-    // 10. Paragraph breaks — double newlines
-    html = html.replace(/\n\s*\n/g, '</p><p>');
-    // Single newlines → <br>
-    html = html.replace(/\n/g, '<br>');
-    // Cleanup: remove <br> immediately before or after block-level tags
-    html = html.replace(/<br>\s*<\/(ul|ol|li|h[234])>/g, '</$1>');
-    html = html.replace(/<\/(ul|ol|li|h[234])>\s*<br>/g, '</$1>');
-    html = html.replace(/<(ul|ol|h[234])>\s*<br>/g, '<$1>');
-    html = html.replace(/<br>\s*<\/(p)>/g, '</$1>');
-    // Wrap in <p> if not already wrapped
-    if (!html.startsWith('<')) {
-      html = '<p>' + html + '</p>';
-    }
-
-    return html;
-  } catch {
-    // If rendering fails, return the original text as safe plain text
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-  }
 }
 
 function handleAgentLoopError(msg: InlineAgentLoopErrorMsg): void {
@@ -1289,14 +1350,12 @@ function syncToMainWorld(
   toolOpenTagRe = buildToolOpenTagRegex(toolDescriptors);
   toolMarkerRe = buildToolMarkerRegex(toolDescriptors);
 
-  window.postMessage({
-    source: 'deepseek-pp-content',
-    type: 'SYNC_STATE',
-    memories,
-    skills,
-    activePreset,
-    modelType,
+  postToMainWorld({
+    type: 'SYNC_HOOK_STATE',
     toolDescriptors,
+    skillSummaries: skills
+      .filter((skill) => skill.enabled !== false)
+      .map((skill) => ({ name: skill.name, description: skill.description })),
   });
 }
 
@@ -1322,9 +1381,7 @@ function buildToolMarkerRegex(descriptors: ToolDescriptor[]): RegExp {
 
 function buildToolTagPattern(descriptors: ToolDescriptor[]): string {
   const catalogNames = createToolInvocationCatalog(descriptors).invocationNames;
-  const names = new Set(catalogNames);
-  for (const name of SHELL_TOOL_NAMES) names.add(name);
-  const escaped = [...names].map(escapeRegExp);
+  const escaped = [...new Set(catalogNames)].map(escapeRegExp);
   return escaped.length > 0 ? escaped.join('|') : 'memory_save|memory_update|memory_delete';
 }
 

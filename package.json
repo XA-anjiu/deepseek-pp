@@ -23,12 +23,13 @@
     "submit:chrome:dry": "wxt submit --dry-run --chrome-zip dist/deepseek-plus-plus-$npm_package_version-chrome.zip",
     "submit:chrome:upload": "wxt submit --chrome-zip dist/deepseek-plus-plus-$npm_package_version-chrome.zip --chrome-skip-submit-review",
     "submit:chrome": "wxt submit --chrome-zip dist/deepseek-plus-plus-$npm_package_version-chrome.zip --chrome-publish-target default",
+    "test": "vitest run",
     "compile": "tsc --noEmit",
     "audit:prod": "npm audit --audit-level=high --omit=dev",
     "verify:workflows": "actionlint",
     "verify:manifest-policy": "node scripts/manifest-policy-check.mjs",
     "verify:release-assets": "node scripts/release-assets-check.mjs",
-    "ci:quality": "npm run verify:workflows && npm run audit:prod && npm run prompt:freeze && npm run compile && npm run verify:automation && npm run smoke:mcp && npm run verify:mcp:mock && npm run smoke:shell && npm run smoke:pow && npm run build:all && npm run verify:manifest-policy && npm run zip:all && npm run verify:release-assets",
+    "ci:quality": "npm run verify:workflows && npm run audit:prod && npm run prompt:freeze && npm run compile && npm test && npm run verify:automation && npm run smoke:mcp && npm run verify:mcp:mock && npm run smoke:shell && npm run smoke:pow && npm run build:all && npm run verify:manifest-policy && npm run zip:all && npm run verify:release-assets",
     "shell:install": "node scripts/install-shell-host.mjs",
     "smoke:pow": "node scripts/pow-smoke.mjs",
     "smoke:web": "node scripts/web-search-smoke.mjs",
@@ -52,7 +53,9 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@wxt-dev/module-react": "^1.1.5",
+    "jsdom": "^29.1.1",
     "typescript": "^5.9.3",
+    "vitest": "^4.1.8",
     "wxt": "^0.20.25"
   }
 }

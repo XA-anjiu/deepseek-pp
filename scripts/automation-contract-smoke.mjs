@@ -54,9 +54,12 @@ assertContains('entrypoints/background.ts', 'chrome.alarms.onAlarm.addListener')
 assertContains('entrypoints/background.ts', 'scanDueAutomations');
 assertContains('entrypoints/background.ts', "case 'CREATE_AUTOMATION'");
 assertContains('entrypoints/background.ts', "case 'RUN_AUTOMATION_NOW'");
-assertContains('entrypoints/content.ts', 'START_INLINE_AGENT_LOOP');
+assertContains('entrypoints/content.ts', 'runInlineAgentLoop');
+assertContains('entrypoints/content.ts', 'DPP_BRIDGE_INIT');
 assertContains('entrypoints/content.ts', 'restorePersistedInlineAgentTraces');
-assertContains('entrypoints/main-world.content.ts', 'runInlineAgentLoop');
+assertContains('entrypoints/main-world.content.ts', 'requestAugmentedBody');
+assertContains('entrypoints/main-world.content.ts', 'DPP_BRIDGE_REQUEST');
+assertNotContains('entrypoints/main-world.content.ts', 'EXECUTE_TOOL_CALL');
 assertContains('core/inline-agent/loop.ts', 'INLINE_AGENT_MAX_STEPS');
 assertContains('core/inline-agent/prompt.ts', 'buildContinuationPrompt');
 assertContains('core/inline-agent/renderer.ts', 'createAgentStepElement');

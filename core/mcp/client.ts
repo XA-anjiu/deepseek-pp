@@ -62,7 +62,7 @@ export async function initializeMcpServer(
   server: McpServerConfig,
   transport: McpProtocolTransport,
 ): Promise<McpInitializeResult> {
-  const response = await transport.request<Record<string, unknown>, McpInitializeResult>(
+    const response = await transport.request<Record<string, unknown>, McpInitializeResult>(
     createMcpRequest('initialize', {
       protocolVersion: MCP_PROTOCOL_VERSION,
       capabilities: {
@@ -73,7 +73,7 @@ export async function initializeMcpServer(
         version: getExtensionVersion(),
       },
     }),
-    { timeoutMs: server.timeouts.connectMs },
+    { timeoutMs: server.timeouts.connectMs, maxResponseBytes: server.limits.maxResultBytes },
   );
   const result = unwrapMcpResponse(response, 'mcp_initialize_failed');
 
@@ -102,7 +102,7 @@ export async function listMcpTools(
   do {
     const response = await transport.request<Record<string, unknown>, McpListToolsResult>(
       createMcpRequest('tools/list', cursor ? { cursor } : undefined),
-      { timeoutMs: server.timeouts.discoveryMs },
+      { timeoutMs: server.timeouts.discoveryMs, maxResponseBytes: server.limits.maxResultBytes },
     );
     const result = unwrapMcpResponse(response, 'mcp_tools_list_failed') as McpListToolsResult;
     const nextTools = Array.isArray(result.tools) ? result.tools : [];
@@ -127,7 +127,10 @@ export async function callMcpTool(
         name: mcpToolName,
         arguments: options.call.payload,
       }),
-      { timeoutMs: options.timeoutMs ?? server.timeouts.requestMs },
+      {
+        timeoutMs: options.timeoutMs ?? server.timeouts.requestMs,
+        maxResponseBytes: options.maxResultBytes ?? server.limits.maxResultBytes,
+      },
     );
     const result = unwrapMcpResponse(response, 'mcp_tool_call_failed') as McpCallToolResult;
     const normalized = normalizeMcpToolResult(server, options.call, result, startedAt, options.maxResultBytes);

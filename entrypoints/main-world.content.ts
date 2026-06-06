@@ -1,156 +1,181 @@
 import {
   installFetchHook,
   updateHookState,
+  type RequestBodyModification,
   type ResponseCompletePayload,
   type ResponseTokenSpeedPayload,
 } from '../core/interceptor/fetch-hook';
 import { initSkillPopup } from '../core/ui/skill-popup';
 import type {
-  Memory,
-  ModelType,
-  Skill,
-  SystemPromptPreset,
   ToolCall,
   ToolCallRestoreRecord,
   ToolDescriptor,
-  ToolExecutionRecord,
-  ToolResult,
 } from '../core/types';
-import { runInlineAgentLoop } from '../core/inline-agent/loop';
-import type { InlineAgentStartPayload } from '../core/inline-agent/types';
+import type { SkillPopupItem } from '../core/ui/skill-popup';
 
 const MAIN_WORLD_SOURCE = 'deepseek-pp-main';
-const TOOL_BRIDGE_TIMEOUT_MS = 120_000;
+const CONTENT_SOURCE = 'deepseek-pp-content';
+const BRIDGE_REQUEST_TYPE = 'DPP_BRIDGE_REQUEST';
+const BRIDGE_INIT_TYPE = 'DPP_BRIDGE_INIT';
+const BRIDGE_READY_TYPE = 'DPP_BRIDGE_READY';
+const REQUEST_TIMEOUT_MS = 8_000;
+const BRIDGE_REQUEST_INTERVAL_MS = 50;
+const BRIDGE_REQUEST_MAX_ATTEMPTS = 100;
 
-let activeAgentAbort: AbortController | null = null;
+type PendingRequest<T> = {
+  resolve: (value: T) => void;
+  reject: (error: Error) => void;
+  timeout: ReturnType<typeof setTimeout>;
+};
+
+type AugmentResultMessage = {
+  source?: string;
+  type?: string;
+  id?: string;
+  ok?: boolean;
+  result?: RequestBodyModification | null;
+  error?: string;
+};
+
+let contentPort: MessagePort | null = null;
+let bridgeRequestAttempts = 0;
+let bridgeRequestTimer: ReturnType<typeof setInterval> | null = null;
+const pendingAugmentRequests = new Map<string, PendingRequest<RequestBodyModification | null>>();
 
 export default defineContentScript({
   matches: ['*://chat.deepseek.com/*'],
   world: 'MAIN',
   runAt: 'document_start',
   main() {
+    installContentBridge();
     installFetchHook();
 
     updateHookState({
-      onToolCall(call: ToolCall) {
-        window.postMessage({ source: MAIN_WORLD_SOURCE, type: 'TOOL_CALL', data: call });
+      onRequestBody: requestAugmentedBody,
+      onHeadersCaptured() {
+        postToContent({ type: 'HEADERS_CAPTURED' });
       },
-      async onToolCallExecuted(call: ToolCall) {
-        return executeToolCallViaContent(call);
+      onToolCall(call: ToolCall) {
+        postToContent({ type: 'TOOL_CALL', data: call });
       },
       onToolCallsRestored(records: ToolCallRestoreRecord[]) {
-        window.postMessage({ source: MAIN_WORLD_SOURCE, type: 'RESTORE_TOOL_CALLS', records });
+        postToContent({ type: 'RESTORE_TOOL_CALLS', records });
       },
       onResponseComplete(complete: ResponseCompletePayload) {
-        window.postMessage({ source: MAIN_WORLD_SOURCE, type: 'RESPONSE_COMPLETE', payload: complete });
+        postToContent({ type: 'RESPONSE_COMPLETE', payload: complete });
       },
       onResponseTokenSpeed(progress: ResponseTokenSpeedPayload) {
-        window.postMessage({ source: MAIN_WORLD_SOURCE, type: 'RESPONSE_TOKEN_SPEED', payload: progress });
+        postToContent({ type: 'RESPONSE_TOKEN_SPEED', payload: progress });
       },
       onMemoriesUsed(ids: number[]) {
-        window.postMessage({ source: MAIN_WORLD_SOURCE, type: 'MEMORIES_USED', ids });
+        postToContent({ type: 'MEMORIES_USED', ids });
       },
-    });
-
-    window.addEventListener('message', (event) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.source !== 'deepseek-pp-content') return;
-
-      switch (event.data.type) {
-        case 'SYNC_STATE': {
-          const { memories, skills, activePreset, modelType, toolDescriptors } = event.data as {
-            memories: Memory[];
-            skills: Skill[];
-            activePreset: SystemPromptPreset | null;
-            modelType: ModelType;
-            toolDescriptors?: ToolDescriptor[];
-          };
-          updateHookState({ memories, skills, activePreset, modelType, ...(toolDescriptors ? { toolDescriptors } : {}) });
-          initSkillPopup(skills);
-          break;
-        }
-        case 'START_INLINE_AGENT_LOOP': {
-          void handleStartInlineAgentLoop(event.data.payload as InlineAgentStartPayload);
-          break;
-        }
-        case 'STOP_INLINE_AGENT_LOOP': {
-          handleStopInlineAgentLoop();
-          break;
-        }
-        case 'TOOL_CALL_RESULT': {
-          break;
-        }
-      }
     });
   },
 });
 
-async function handleStartInlineAgentLoop(payload: InlineAgentStartPayload): Promise<void> {
-  if (activeAgentAbort) activeAgentAbort.abort();
+function installContentBridge(): void {
+  window.addEventListener('message', (event) => {
+    if (event.origin !== window.location.origin) return;
+    if (event.data?.source !== CONTENT_SOURCE || event.data.type !== BRIDGE_INIT_TYPE) return;
+    if (contentPort) return;
 
-  const abort = new AbortController();
-  activeAgentAbort = abort;
+    const [port] = event.ports;
+    if (!port) return;
 
-  const post = (type: string, data: unknown) => {
-    window.postMessage({ source: MAIN_WORLD_SOURCE, type, data });
-  };
+    contentPort = port;
+    contentPort.onmessage = (message) => handlePortMessage(message.data);
+    contentPort.start();
+    stopBridgeRequests();
+    postToContent({ type: BRIDGE_READY_TYPE });
+  });
 
-  const executeTool = async (call: ToolCall): Promise<ToolExecutionRecord> => {
-    const enrichedCall: ToolCall = {
-      ...call,
-      source: {
-        trigger: 'agent_run',
-        chatSessionId: payload.chatSessionId,
-        runId: payload.loopId,
-      },
-    };
-    const result = await executeToolCallViaContent(enrichedCall);
-    return {
-      name: call.name,
-      result: {
-        ok: result.ok,
-        summary: result.summary,
-        detail: result.detail,
-        output: result.output,
-        error: result.error,
-        truncated: result.truncated,
-      },
-      provider: call.provider,
-      descriptorId: call.descriptorId,
-    };
-  };
-
-  await runInlineAgentLoop(payload, { post, executeTool, signal: abort.signal });
-  if (activeAgentAbort === abort) activeAgentAbort = null;
+  bridgeRequestTimer = setInterval(() => {
+    if (contentPort || bridgeRequestAttempts >= BRIDGE_REQUEST_MAX_ATTEMPTS) {
+      stopBridgeRequests();
+      return;
+    }
+    bridgeRequestAttempts++;
+    window.postMessage({ source: MAIN_WORLD_SOURCE, type: BRIDGE_REQUEST_TYPE }, window.location.origin);
+  }, BRIDGE_REQUEST_INTERVAL_MS);
 }
 
-function handleStopInlineAgentLoop(): void {
-  if (activeAgentAbort) {
-    activeAgentAbort.abort();
-    activeAgentAbort = null;
+function stopBridgeRequests(): void {
+  if (!bridgeRequestTimer) return;
+  clearInterval(bridgeRequestTimer);
+  bridgeRequestTimer = null;
+}
+
+function handlePortMessage(data: unknown): void {
+  const message = data && typeof data === 'object' ? data as AugmentResultMessage : {};
+  if (message.source !== CONTENT_SOURCE) return;
+
+  switch (message.type) {
+    case 'SYNC_HOOK_STATE': {
+      const value = message as { toolDescriptors?: unknown; skillSummaries?: unknown };
+      updateHookState({
+        toolDescriptors: normalizeToolDescriptors(value.toolDescriptors),
+      });
+      initSkillPopup(normalizeSkillSummaries(value.skillSummaries));
+      break;
+    }
+    case 'AUGMENT_REQUEST_BODY_RESULT': {
+      settleAugmentRequest(message);
+      break;
+    }
   }
 }
 
-function executeToolCallViaContent(call: ToolCall): Promise<ToolResult> {
-  return new Promise((resolve) => {
-    const id = Math.random().toString(36).slice(2);
+function requestAugmentedBody(body: string): Promise<RequestBodyModification | null> {
+  if (!contentPort) {
+    throw new Error('DeepSeek++ main/content bridge is not connected.');
+  }
+
+  const id = crypto.randomUUID();
+  return new Promise<RequestBodyModification | null>((resolve, reject) => {
     const timeout = setTimeout(() => {
-      window.removeEventListener('message', handler);
-      resolve({ ok: false, summary: 'Tool execution timed out (bridge timeout)' });
-    }, TOOL_BRIDGE_TIMEOUT_MS);
-    const handler = (event: MessageEvent) => {
-      if (event.data?.source !== 'deepseek-pp-content') return;
-      if (event.data.type !== 'TOOL_CALL_RESULT' || event.data.id !== id) return;
-      clearTimeout(timeout);
-      window.removeEventListener('message', handler);
-      resolve(event.data.result as ToolResult);
-    };
-    window.addEventListener('message', handler);
-    window.postMessage({
-      source: MAIN_WORLD_SOURCE,
-      type: 'EXECUTE_TOOL_CALL',
-      data: call,
-      id,
-    });
+      pendingAugmentRequests.delete(id);
+      reject(new Error('DeepSeek++ request augmentation timed out.'));
+    }, REQUEST_TIMEOUT_MS);
+
+    pendingAugmentRequests.set(id, { resolve, reject, timeout });
+    postToContent({ type: 'AUGMENT_REQUEST_BODY', id, body });
   });
+}
+
+function settleAugmentRequest(message: AugmentResultMessage): void {
+  if (!message.id) return;
+  const pending = pendingAugmentRequests.get(message.id);
+  if (!pending) return;
+
+  pendingAugmentRequests.delete(message.id);
+  clearTimeout(pending.timeout);
+
+  if (message.ok === false) {
+    pending.reject(new Error(message.error || 'DeepSeek++ request augmentation failed.'));
+    return;
+  }
+
+  pending.resolve(message.result ?? null);
+}
+
+function postToContent(message: Record<string, unknown>): void {
+  if (!contentPort) return;
+  contentPort.postMessage({ source: MAIN_WORLD_SOURCE, ...message });
+}
+
+function normalizeToolDescriptors(value: unknown): ToolDescriptor[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is ToolDescriptor => Boolean(item && typeof item === 'object'));
+}
+
+function normalizeSkillSummaries(value: unknown): SkillPopupItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is { name: string; description: string } =>
+      Boolean(item && typeof item === 'object') &&
+      typeof (item as { name?: unknown }).name === 'string' &&
+      typeof (item as { description?: unknown }).description === 'string',
+    )
+    .map((item) => ({ name: item.name, description: item.description }));
 }

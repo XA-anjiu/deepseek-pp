@@ -4,6 +4,7 @@ import { SHELL_MCP_NATIVE_HOST, SHELL_MCP_SERVER_NAME } from './contracts';
 export interface ShellMcpPresetOptions {
   nativeHost?: string;
   enabled?: boolean;
+  executionEnabled?: boolean;
 }
 
 export function createShellMcpPresetInput(
@@ -11,7 +12,7 @@ export function createShellMcpPresetInput(
 ): McpServerCreateInput {
   return {
     displayName: SHELL_MCP_SERVER_NAME,
-    enabled: options.enabled ?? true,
+    enabled: options.enabled ?? false,
     transport: {
       kind: 'native_messaging',
       nativeHost: options.nativeHost ?? SHELL_MCP_NATIVE_HOST,
@@ -28,12 +29,12 @@ export function createShellMcpPresetInput(
       maxToolCount: 8,
     },
     allowlist: {
-      mode: 'all',
-      toolNames: [],
+      mode: 'allow',
+      toolNames: ['shell_status'],
     },
     execution: {
-      enabled: true,
-      mode: 'auto',
+      enabled: options.executionEnabled ?? false,
+      mode: 'manual',
     },
   };
 }

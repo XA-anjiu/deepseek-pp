@@ -13,6 +13,7 @@ import {
 import type { BackgroundConfig, Memory, PetConfig, PetPosition, SyncConfig, SyncCounts } from '../../../core/types';
 import { SVG_PATHS } from '../constants';
 import { getChatEnabled, setChatEnabled } from '../../../core/chat/store';
+import { validateImportedMemory } from '../../../core/sync/schema';
 import ScenarioManager from '../components/ScenarioManager';
 
 const DEFAULT_SYNC_CONFIG: SyncConfig = {
@@ -371,14 +372,17 @@ export default function SettingsPage() {
       if (!file) return;
       const text = await file.text();
       try {
-        const memories: Memory[] = JSON.parse(text);
-        for (const mem of memories) {
-          const { id, createdAt, updatedAt, accessCount, lastAccessedAt, ...rest } = mem;
-          await chrome.runtime.sendMessage({ type: 'SAVE_MEMORY', payload: rest });
+        const parsed: unknown = JSON.parse(text);
+        if (!Array.isArray(parsed)) {
+          throw new Error('导入文件必须是记忆数组');
+        }
+        const memories = parsed.map((mem, index) => validateImportedMemory(mem, `memories[${index}]`));
+        for (const memory of memories) {
+          await chrome.runtime.sendMessage({ type: 'SAVE_MEMORY', payload: memory });
         }
         setMemoryCount((c) => c + memories.length);
-      } catch {
-        alert('JSON 格式错误');
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'JSON 格式错误');
       }
     };
     input.click();

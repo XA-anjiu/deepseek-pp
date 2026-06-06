@@ -13,24 +13,6 @@ const STYLE_INDEX_MODULE = import.meta.glob('./officecli-official/styles/INDEX.m
   import: 'default',
 }) as Record<string, string>;
 
-const STYLE_MODULES = import.meta.glob('./officecli-official/styles/*/style.md', {
-  eager: true,
-  query: '?raw',
-  import: 'default',
-}) as Record<string, string>;
-
-const MORPH_REFERENCE_MODULES = import.meta.glob('./officecli-official/skills/morph-ppt/reference/*.md', {
-  eager: true,
-  query: '?raw',
-  import: 'default',
-}) as Record<string, string>;
-
-const MORPH_STYLE_INDEX_MODULE = import.meta.glob('./officecli-official/skills/morph-ppt/reference/styles/INDEX.md', {
-  eager: true,
-  query: '?raw',
-  import: 'default',
-}) as Record<string, string>;
-
 const OFFICECLI_SKILL_ORDER = [
   'officecli',
   'officecli-docx',
@@ -75,8 +57,6 @@ const officialSkillDocs = new Map(
 );
 
 const officialStyleIndex = firstModule(STYLE_INDEX_MODULE).trim();
-const officialStyleLibrary = renderStyleLibrary();
-const morphReferences = renderMorphReferences();
 
 export const OFFICIAL_OFFICECLI_SKILLS: Skill[] = [
   ...OFFICECLI_SKILL_ORDER.map((name) => createOfficialOfficeCliSkill(name)),
@@ -113,7 +93,7 @@ function createOfficialStyleSkill(): Skill {
       '',
       '## Official OfficeCLI Style Library',
       '',
-      officialStyleLibrary,
+      renderStyleLibrary(),
     ].join('\n'),
     source: 'official',
     memoryEnabled: false,
@@ -139,7 +119,7 @@ function buildOfficialSkillInstructions(name: string): string {
     parts.push(renderStyleIndexAppendix());
   }
   if (name === 'morph-ppt' || name === 'morph-ppt-3d') {
-    parts.push(morphReferences);
+    parts.push(renderMorphReferences());
   }
 
   return parts.filter(Boolean).join('\n\n---\n\n');
@@ -165,35 +145,15 @@ function renderStyleIndexAppendix(): string {
 }
 
 function renderMorphReferences(): string {
-  const references = [
-    ...Object.entries(MORPH_REFERENCE_MODULES),
-    ...Object.entries(MORPH_STYLE_INDEX_MODULE),
-  ]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([path, body]) => {
-      const name = path.replace('./officecli-official/skills/morph-ppt/reference/', '');
-      return [`## ${name}`, body.trim()].join('\n\n');
-    })
-    .join('\n\n');
-
-  if (!references) return '';
   return [
     '# Official OfficeCLI Morph References',
     '',
-    references,
+    'Morph reference details are no longer eagerly embedded in the background bundle. Use `/officecli-styles` for the bundled style index and load detailed style/reference material only when the user explicitly asks for it.',
   ].join('\n');
 }
 
 function renderStyleLibrary(): string {
-  const styleDocs = Object.entries(STYLE_MODULES)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([path, body]) => {
-      const directory = path.split('/').at(-2) ?? 'unknown-style';
-      return [`## ${directory}`, body.trim()].join('\n\n');
-    })
-    .join('\n\n---\n\n');
-
-  return [officialStyleIndex, styleDocs].filter(Boolean).join('\n\n---\n\n');
+  return officialStyleIndex;
 }
 
 function parseOfficialSkill(raw: string): OfficialSkillDoc {

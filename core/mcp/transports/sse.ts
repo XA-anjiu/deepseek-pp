@@ -8,6 +8,7 @@ import type {
 } from '../types';
 import {
   McpTransportError,
+  assertWithinByteLimit,
   drainSseEvents,
   ensureMcpServerOriginPermission,
   fetchWithTimeout,
@@ -18,10 +19,10 @@ import {
 export function createMcpSseTransport(server: McpServerConfig): McpProtocolTransport {
   return {
     request(request, options) {
-      return sendSseMessage(server, request, options?.timeoutMs);
+      return sendSseMessage(server, request, options?.timeoutMs, options?.maxResponseBytes);
     },
     async notify(notification, options) {
-      await sendSseMessage(server, notification, options?.timeoutMs);
+      await sendSseMessage(server, notification, options?.timeoutMs, options?.maxResponseBytes);
     },
   };
 }
@@ -30,6 +31,7 @@ async function sendSseMessage<TParams extends Record<string, unknown> | undefine
   server: McpServerConfig,
   message: McpJsonRpcRequest<TParams> | McpJsonRpcNotification,
   timeoutMs: number = server.timeouts.requestMs,
+  maxResponseBytes: number = server.limits.maxResultBytes,
 ): Promise<McpJsonRpcResponse<TResult>> {
   await ensureMcpServerOriginPermission(server);
   const sseResponse = await fetchWithTimeout(getMcpEndpointUrl(server), {
@@ -47,7 +49,7 @@ async function sendSseMessage<TParams extends Record<string, unknown> | undefine
 
   const reader = sseResponse.body.getReader();
   const decoder = new TextDecoder();
-  const postUrl = await readSseEndpoint(server, reader, decoder, timeoutMs);
+  const postUrl = await readSseEndpoint(server, reader, decoder, timeoutMs, maxResponseBytes);
   await postSseMessage(server, postUrl, message, timeoutMs);
 
   if (!('id' in message)) {
@@ -56,7 +58,7 @@ async function sendSseMessage<TParams extends Record<string, unknown> | undefine
   }
 
   try {
-    return await readSseResponseFromReader(reader, decoder, message as McpJsonRpcRequest<TParams>);
+    return await readSseResponseFromReader(reader, decoder, message as McpJsonRpcRequest<TParams>, maxResponseBytes);
   } finally {
     reader.cancel().catch(() => undefined);
   }
@@ -67,13 +69,16 @@ async function readSseEndpoint(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   decoder: TextDecoder,
   timeoutMs: number,
+  maxResponseBytes: number,
 ): Promise<URL> {
   const deadline = Date.now() + timeoutMs;
   let buffer = '';
+  let totalBytes = 0;
 
   while (Date.now() < deadline) {
     const { done, value } = await reader.read();
     if (done) break;
+    totalBytes = assertWithinByteLimit(totalBytes, value.byteLength, maxResponseBytes, reader);
     buffer += decoder.decode(value, { stream: true });
     const drained = drainSseEvents(buffer);
     buffer = drained.remainder;
@@ -111,12 +116,15 @@ async function readSseResponseFromReader<TResult>(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   decoder: TextDecoder,
   expectedRequest: McpJsonRpcRequest<any>,
+  maxResponseBytes: number,
 ): Promise<McpJsonRpcResponse<TResult>> {
   let buffer = '';
+  let totalBytes = 0;
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
+    totalBytes = assertWithinByteLimit(totalBytes, value.byteLength, maxResponseBytes, reader);
     buffer += decoder.decode(value, { stream: true });
     const drained = drainSseEvents(buffer);
     buffer = drained.remainder;

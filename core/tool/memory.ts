@@ -162,14 +162,15 @@ export async function executeMemoryToolCall(
 }
 
 async function saveMemory(runtime: MemoryToolRuntime, call: ToolCall): Promise<ToolResult> {
-  const payload = call.payload;
-  const name = stringValue(payload.name) || 'unnamed';
+  const parsed = parseMemorySavePayload(call);
+  if (!parsed.ok) return parsed.result;
+
   const saved = await runtime.saveMemory({
-    type: memoryTypeValue(payload.type) || 'topic',
-    name,
-    content: stringValue(payload.content),
-    description: name,
-    tags: stringArrayValue(payload.tags),
+    type: parsed.memory.type,
+    name: parsed.memory.name,
+    content: parsed.memory.content,
+    description: parsed.memory.name,
+    tags: parsed.memory.tags,
     pinned: false,
   });
 
@@ -177,7 +178,53 @@ async function saveMemory(runtime: MemoryToolRuntime, call: ToolCall): Promise<T
     return failure(call, 'memory_save_failed', '保存失败', '未收到保存确认', true);
   }
 
-  return success(call, '已保存', name, { id: saved.id });
+  return success(call, '已保存', parsed.memory.name, { id: saved.id });
+}
+
+function parseMemorySavePayload(
+  call: ToolCall,
+): { ok: true; memory: Pick<NewMemory, 'type' | 'name' | 'content' | 'tags'> } | { ok: false; result: ToolResult } {
+  const payload = call.payload;
+  const type = memoryTypeValue(payload.type);
+  if (!type) {
+    return {
+      ok: false,
+      result: failure(call, 'memory_invalid_payload', '记忆格式错误', 'type 必须是 user、feedback、topic 或 reference', false),
+    };
+  }
+
+  const name = requiredStringValue(payload.name);
+  if (!name) {
+    return {
+      ok: false,
+      result: failure(call, 'memory_invalid_payload', '记忆格式错误', 'name 必须是非空字符串', false),
+    };
+  }
+
+  const content = requiredStringValue(payload.content);
+  if (!content) {
+    return {
+      ok: false,
+      result: failure(call, 'memory_invalid_payload', '记忆格式错误', 'content 必须是非空字符串', false),
+    };
+  }
+
+  if (!Array.isArray(payload.tags) || !payload.tags.every((item) => typeof item === 'string')) {
+    return {
+      ok: false,
+      result: failure(call, 'memory_invalid_payload', '记忆格式错误', 'tags 必须是字符串数组', false),
+    };
+  }
+
+  return {
+    ok: true,
+    memory: {
+      type,
+      name,
+      content,
+      tags: [...payload.tags],
+    },
+  };
 }
 
 async function updateExistingMemory(runtime: MemoryToolRuntime, call: ToolCall): Promise<ToolResult> {
@@ -247,6 +294,10 @@ function failure(
 
 function stringValue(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+function requiredStringValue(value: unknown): string {
+  return typeof value === 'string' && value.trim().length > 0 ? value : '';
 }
 
 function numberValue(value: unknown): number {

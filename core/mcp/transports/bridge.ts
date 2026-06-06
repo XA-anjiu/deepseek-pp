@@ -28,10 +28,10 @@ interface McpBridgeEnvelope {
 export function createMcpBridgeTransport(server: McpServerConfig): McpProtocolTransport {
   return {
     request(request, options) {
-      return sendBridgeMessage(server, request, options?.timeoutMs);
+      return sendBridgeMessage(server, request, options?.timeoutMs, options?.maxResponseBytes);
     },
     async notify(notification, options) {
-      await sendBridgeMessage(server, notification, options?.timeoutMs);
+      await sendBridgeMessage(server, notification, options?.timeoutMs, options?.maxResponseBytes);
     },
   };
 }
@@ -40,6 +40,7 @@ async function sendBridgeMessage<TParams extends Record<string, unknown> | undef
   server: McpServerConfig,
   message: McpJsonRpcRequest<TParams> | McpJsonRpcNotification,
   timeoutMs: number = server.timeouts.requestMs,
+  maxResponseBytes: number = server.limits.maxResultBytes,
 ): Promise<McpJsonRpcResponse<TResult>> {
   await ensureMcpServerOriginPermission(server);
   const response = await fetchWithTimeout(getMcpEndpointUrl(server), {
@@ -55,6 +56,7 @@ async function sendBridgeMessage<TParams extends Record<string, unknown> | undef
   return readJsonRpcResponse<TResult>(
     response,
     'id' in message ? message as McpJsonRpcRequest<TParams> : undefined,
+    { maxBytes: maxResponseBytes },
   );
 }
 

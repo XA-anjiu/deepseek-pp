@@ -85,6 +85,7 @@ export async function fetchWithTimeout(
 export async function readJsonRpcResponse<TResult>(
   response: Response,
   expectedRequest?: McpJsonRpcRequest<any>,
+  options: { maxBytes?: number } = {},
 ): Promise<McpJsonRpcResponse<TResult>> {
   if (!response.ok) {
     throw new McpTransportError(
@@ -96,10 +97,10 @@ export async function readJsonRpcResponse<TResult>(
 
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('text/event-stream')) {
-    return readSseJsonRpcResponse(response, expectedRequest);
+    return readSseJsonRpcResponse(response, expectedRequest, options);
   }
 
-  const raw = await response.text();
+  const raw = await readResponseTextWithLimit(response, options.maxBytes);
   if (!raw.trim()) {
     return {
       jsonrpc: '2.0',
@@ -113,6 +114,7 @@ export async function readJsonRpcResponse<TResult>(
 export async function readSseJsonRpcResponse<TResult>(
   response: Response,
   expectedRequest?: McpJsonRpcRequest<any>,
+  options: { maxBytes?: number } = {},
 ): Promise<McpJsonRpcResponse<TResult>> {
   if (!response.body) {
     throw new McpTransportError('mcp_sse_empty_body', 'MCP SSE response did not include a body.');
@@ -121,10 +123,12 @@ export async function readSseJsonRpcResponse<TResult>(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let totalBytes = 0;
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
+    totalBytes = assertWithinByteLimit(totalBytes, value.byteLength, options.maxBytes, reader);
     buffer += decoder.decode(value, { stream: true });
     const events = drainSseEvents(buffer);
     buffer = events.remainder;
@@ -139,6 +143,43 @@ export async function readSseJsonRpcResponse<TResult>(
   }
 
   throw new McpTransportError('mcp_sse_response_missing', 'MCP SSE stream ended without a matching response.');
+}
+
+export async function readResponseTextWithLimit(response: Response, maxBytes?: number): Promise<string> {
+  if (!response.body) return response.text();
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let raw = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes = assertWithinByteLimit(totalBytes, value.byteLength, maxBytes, reader);
+    raw += decoder.decode(value, { stream: true });
+  }
+
+  raw += decoder.decode();
+  return raw;
+}
+
+export function assertWithinByteLimit(
+  currentBytes: number,
+  nextBytes: number,
+  maxBytes: number | undefined,
+  reader?: ReadableStreamDefaultReader<Uint8Array>,
+): number {
+  const total = currentBytes + nextBytes;
+  if (maxBytes && total > maxBytes) {
+    reader?.cancel().catch(() => undefined);
+    throw new McpTransportError(
+      'mcp_response_too_large',
+      `MCP response exceeded ${maxBytes} bytes before parsing completed.`,
+      { retryable: false },
+    );
+  }
+  return total;
 }
 
 export interface SseEvent {

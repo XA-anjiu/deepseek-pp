@@ -1,14 +1,17 @@
-import type { Skill } from '../types';
+export interface SkillPopupItem {
+  name: string;
+  description: string;
+}
 
 let popupEl: HTMLElement | null = null;
-let skills: Skill[] = [];
-let filtered: Skill[] = [];
+let skills: SkillPopupItem[] = [];
+let filtered: SkillPopupItem[] = [];
 let activeIdx = 0;
 let textarea: HTMLTextAreaElement | null = null;
 
 let initialized = false;
 
-export function initSkillPopup(initialSkills: Skill[]) {
+export function initSkillPopup(initialSkills: SkillPopupItem[]) {
   skills = initialSkills;
   if (initialized) return;
   initialized = true;
@@ -92,7 +95,7 @@ function onClickOutside(e: MouseEvent) {
   hidePopup();
 }
 
-function selectSkill(skill: Skill) {
+function selectSkill(skill: SkillPopupItem) {
   if (!textarea || !skill) return;
 
   const newVal = `/${skill.name} `;

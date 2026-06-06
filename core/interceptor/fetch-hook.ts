@@ -1,9 +1,7 @@
-import { DEEPSEEK_API_URL, PRESET_REINJECTION_INTERVAL } from '../constants';
+import { DEEPSEEK_API_URL } from '../constants';
 import { rememberDeepSeekClientHeaders, saveClientHeadersToStorage } from '../deepseek/adapter';
-import type { Memory, ModelType, SystemPromptPreset, ToolCall, ToolCallRestoreRecord, ToolDescriptor } from '../types';
-import { buildPromptAugmentation, sanitizeInternalPromptText } from '../prompt';
-import { parseSkillCommand } from '../skill/parser';
-import { SHELL_TOOL_NAMES } from '../shell/contracts';
+import type { ToolCall, ToolCallRestoreRecord, ToolDescriptor } from '../types';
+import { sanitizeInternalPromptText } from '../prompt';
 import {
   DEFAULT_TOOL_DESCRIPTORS,
   createToolInvocationCatalog,
@@ -33,14 +31,10 @@ const initialHookStateReady = new Promise<void>((resolve) => {
 });
 
 interface HookState {
-  memories: Memory[];
-  skills: Array<{ name: string; instructions: string; memoryEnabled: boolean }>;
-  activePreset: SystemPromptPreset | null;
-  modelType: ModelType;
   toolDescriptors: ToolDescriptor[];
-  messageCount: number;
+  onRequestBody: (body: string) => Promise<RequestBodyModification | null>;
+  onHeadersCaptured: () => void;
   onToolCall: (call: ToolCall) => void;
-  onToolCallExecuted: (call: ToolCall) => Promise<{ ok: boolean; summary: string; detail?: string }>;
   onToolCallsRestored: (records: ToolCallRestoreRecord[]) => void;
   onResponseTokenSpeed: (progress: ResponseTokenSpeedPayload) => void;
   onResponseComplete: (complete: ResponseCompletePayload) => void;
@@ -48,14 +42,10 @@ interface HookState {
 }
 
 let hookState: HookState = {
-  memories: [],
-  skills: [],
-  activePreset: null,
-  modelType: null,
   toolDescriptors: [...DEFAULT_TOOL_DESCRIPTORS],
-  messageCount: 0,
+  onRequestBody: async () => null,
+  onHeadersCaptured: () => {},
   onToolCall: () => {},
-  onToolCallExecuted: async () => ({ ok: true, summary: '' }),
   onToolCallsRestored: () => {},
   onResponseTokenSpeed: () => {},
   onResponseComplete: () => {},
@@ -105,7 +95,7 @@ interface RequestContextOverrides {
   agentTaskPrompt?: string;
 }
 
-interface RequestBodyModification {
+export interface RequestBodyModification {
   body: string;
   agentTaskPrompt: string;
 }
@@ -131,12 +121,9 @@ function hookFetch() {
     await waitForInitialHookState();
     rememberDeepSeekClientHeaders(init.headers);
     saveClientHeadersToStorage();
-    // Notify isolated-world content script to persist headers to chrome.storage
-    try {
-      window.postMessage({ source: 'deepseek-pp-main', type: 'HEADERS_CAPTURED' }, window.location.origin);
-    } catch { /* main world may not have full origin context */ }
+    hookState.onHeadersCaptured();
     const originalContext = createRequestContext(init.body);
-    const modified = modifyRequestBody(init.body);
+    const modified = await hookState.onRequestBody(init.body);
     const requestBody = modified?.body ?? init.body;
     const requestContext = createRequestContext(requestBody, {
       originalPrompt: originalContext.originalPrompt,
@@ -170,14 +157,12 @@ function hookXHR() {
     const url = xhrUrls.get(this);
     if (url && isChatStreamURL(url) && typeof body === 'string') {
       const xhr = this;
-      const sendChatRequest = () => {
+      const sendChatRequest = async () => {
         rememberDeepSeekClientHeaders(xhrHeaders.get(xhr));
         saveClientHeadersToStorage();
-        try {
-          window.postMessage({ source: 'deepseek-pp-main', type: 'HEADERS_CAPTURED' }, window.location.origin);
-        } catch {}
+        hookState.onHeadersCaptured();
         const originalContext = createRequestContext(body);
-        const modified = modifyRequestBody(body);
+        const modified = await hookState.onRequestBody(body);
         const requestBody = modified?.body ?? body;
         setupXHRResponseInterceptor(xhr, createRequestContext(requestBody, {
           originalPrompt: originalContext.originalPrompt,
@@ -185,7 +170,10 @@ function hookXHR() {
         }));
         return origSend.call(xhr, requestBody);
       };
-      if (initialHookStateWaitComplete) return sendChatRequest();
+      if (initialHookStateWaitComplete) {
+        void sendChatRequest();
+        return;
+      }
       void waitForInitialHookState().then(sendChatRequest);
       return;
     }
@@ -278,115 +266,6 @@ function normalizeMessageId(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
-}
-
-function modifyRequestBody(bodyStr: string): RequestBodyModification | null {
-  let body: Record<string, unknown>;
-  try {
-    body = JSON.parse(bodyStr);
-  } catch {
-    return null;
-  }
-
-  const originalPrompt = (body.prompt as string) || '';
-  if (!originalPrompt) return null;
-
-  const thinkingEnabled = body.thinking_enabled === true;
-  const effectiveToolDescriptors = hookState.toolDescriptors;
-  const isFirstMessage = body.parent_message_id === null || body.parent_message_id === undefined;
-
-  if (isFirstMessage) {
-    hookState.messageCount = 0;
-  }
-  hookState.messageCount++;
-
-  const shouldInjectPreset =
-    hookState.activePreset &&
-    (isFirstMessage || hookState.messageCount % PRESET_REINJECTION_INTERVAL === 0);
-
-  const presetContent = shouldInjectPreset ? hookState.activePreset!.content : null;
-
-  if (hookState.modelType) {
-    body.model_type = hookState.modelType;
-  }
-
-  const invocation = parseSkillCommand(originalPrompt);
-  if (invocation) {
-    const resolved = resolveSkills(invocation.skillName, invocation.args);
-    if (resolved) {
-      const { augmented, usedMemoryIds } = buildPromptAugmentation(resolved.combinedPrompt, {
-        memories: hookState.memories,
-        thinkingEnabled,
-        identityOnly: !resolved.memoryEnabled,
-        presetContent,
-        toolDescriptors: effectiveToolDescriptors,
-      });
-
-      body.prompt = augmented;
-      if (usedMemoryIds.length > 0) {
-        hookState.onMemoriesUsed(usedMemoryIds);
-      }
-      return { body: JSON.stringify(body), agentTaskPrompt: resolved.combinedPrompt };
-    }
-  }
-
-  const { augmented, usedMemoryIds } = buildPromptAugmentation(originalPrompt, {
-    memories: hookState.memories,
-    thinkingEnabled,
-    presetContent,
-    toolDescriptors: effectiveToolDescriptors,
-  });
-  body.prompt = augmented;
-
-  if (usedMemoryIds.length > 0) {
-    hookState.onMemoriesUsed(usedMemoryIds);
-  }
-
-  return { body: JSON.stringify(body), agentTaskPrompt: originalPrompt };
-}
-
-function hasExecutableMcpTools(descriptors: readonly ToolDescriptor[]): boolean {
-  return descriptors.some((descriptor) =>
-    descriptor.provider.kind === 'mcp' &&
-    descriptor.execution.enabled &&
-    descriptor.execution.mode !== 'disabled'
-  );
-}
-
-interface ResolvedSkills {
-  combinedPrompt: string;
-  memoryEnabled: boolean;
-}
-
-function wrapUserInput(instructions: string, userInput: string): string {
-  return `${instructions}\n\n---\n\n以下是用户本次的输入，请根据上述指令处理：\n\n${userInput}`;
-}
-
-function resolveSkills(skillName: string, args: string): ResolvedSkills | null {
-  const primarySkill = hookState.skills.find((s) => s.name === skillName);
-  if (!primarySkill) return null;
-
-  const secondInvocation = parseSkillCommand('/' + args);
-  if (secondInvocation) {
-    const secondSkill = hookState.skills.find((s) => s.name === secondInvocation.skillName);
-    if (secondSkill) {
-      const userArgs = secondInvocation.args;
-      const combinedInstructions = primarySkill.instructions + '\n\n---\n\n' + secondSkill.instructions;
-      return {
-        combinedPrompt: userArgs
-          ? wrapUserInput(combinedInstructions, userArgs)
-          : combinedInstructions,
-        memoryEnabled: primarySkill.memoryEnabled || secondSkill.memoryEnabled,
-      };
-    }
-  }
-
-  return {
-    combinedPrompt: args
-      ? wrapUserInput(primarySkill.instructions, args)
-      : primarySkill.instructions,
-    memoryEnabled: primarySkill.memoryEnabled,
-  };
 }
 
 function notifyNewToolCalls(
@@ -691,13 +570,8 @@ class XmlToolStreamFilter {
   constructor(descriptors: readonly ToolDescriptor[] = DEFAULT_TOOL_DESCRIPTORS, visiblePrompt: string = '') {
     this.catalog = createToolInvocationCatalog(descriptors);
     this.visiblePrompt = visiblePrompt;
-    // Always recognize shell tool names for filtering, even if not in descriptors
-    const invocationNames = [...this.catalog.invocationNames];
-    for (const name of SHELL_TOOL_NAMES) {
-      if (!invocationNames.includes(name)) invocationNames.push(name);
-    }
-    this.toolInvocationNames = invocationNames;
-    this.toolOpenTags = invocationNames.map(getToolOpenTag);
+    this.toolInvocationNames = [...this.catalog.invocationNames];
+    this.toolOpenTags = this.toolInvocationNames.map(getToolOpenTag);
   }
 
   processChunk(chunk: string, controller: ReadableStreamDefaultController<Uint8Array>) {
@@ -1013,7 +887,7 @@ async function interceptFetchResponse(
         if (calls.length > 0) {
           for (const call of calls.slice(notifiedCount)) {
             if (cancelled) break;
-            await hookState.onToolCallExecuted(call);
+            hookState.onToolCall(call);
           }
         }
 

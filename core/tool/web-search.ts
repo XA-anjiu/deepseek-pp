@@ -56,9 +56,9 @@ export const WEB_SEARCH_TOOL_DESCRIPTORS: ToolDescriptor[] = [
       additionalProperties: false,
     },
     execution: {
-      mode: 'auto',
+      mode: 'manual',
       enabled: true,
-      risk: 'low',
+      risk: 'medium',
     },
   },
 ];
