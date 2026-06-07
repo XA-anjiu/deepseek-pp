@@ -73,8 +73,9 @@ In plain terms, it is a DeepSeek Chrome extension, DeepSeek MCP tools extension,
 ### Side-Panel Chat
 
 - **Optional chat entry** - After it is enabled in settings, the side panel shows a Chat page where you can message DeepSeek directly.
-- **Right-click selected text** - Select text on any page and send it to the side-panel chat for quick explanation, summary, or rewriting.
+- **Right-click selected text** - Select text and send it to the side-panel chat for quick explanation, summary, or rewriting.
 - **Right-click scenarios** - Configure reusable scenario templates that wrap selected text in fixed prompts.
+- **Official API Key** - After a Key is configured, side-panel chat and right-click scenarios can work on normal web pages; without a Key, right-click scenarios stay limited to DeepSeek Web.
 - **Independent new conversations** - Create new side-panel conversations to avoid mixing with the current page conversation.
 - **Streaming display** - Responses render continuously in the side panel. If login is missing, the extension prompts you to return to DeepSeek and sign in.
 

@@ -87,7 +87,7 @@ Rationale:
 
 - Website content: the extension runs on and reads/modifies the DeepSeek web chat UI to provide user-facing features.
 - Personal communications: DeepSeek chat prompts and responses may include user communications and are processed to inject memory, skills, tool results, and user-requested local conversation exports.
-- Authentication information: optional WebDAV credentials, MCP headers, and native/local tool settings may be stored when the user configures them.
+- Authentication information: optional DeepSeek API Key, WebDAV credentials, MCP headers, and native/local tool settings may be stored when the user configures them.
 
 Do not select financial/payment, health, location, or browsing history unless a future version adds those data types explicitly.
 
@@ -107,6 +107,12 @@ Stores extension data locally, including memories, custom skills, prompt presets
 Schedules and wakes user-created automation tasks. Automation runs only for tasks configured by the user.
 ```
 
+#### `contextMenus`
+
+```text
+Adds right-click actions for selected page text so the user can send the selection to side-panel chat or a configured scenario. Without a DeepSeek API Key, these actions are limited to chat.deepseek.com; with a user-configured API Key, they are available on normal web pages.
+```
+
 #### `nativeMessaging`
 
 ```text
@@ -123,6 +129,12 @@ Provides the extension's management UI in Chrome's side panel for memories, skil
 
 ```text
 Runs the extension on the DeepSeek web app so it can inject user-selected context, detect tool-call markup, render tool results, export user-requested conversation history, and support automation inside DeepSeek conversations.
+```
+
+#### Host permission: `https://api.deepseek.com/*`
+
+```text
+Allows side-panel chat to send user-entered prompts to the official DeepSeek API when the user configures their own DeepSeek API Key. The extension stores the API Key locally and does not use this host unless the user enables the API-key path.
 ```
 
 #### Optional host permissions: `http://*/*`, `https://*/*`

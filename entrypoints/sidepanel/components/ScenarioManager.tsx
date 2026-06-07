@@ -54,7 +54,7 @@ export default function ScenarioManager() {
   };
 
   return (
-    <div className="mt-6">
+    <div>
       <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--ds-text)' }}>
         右键场景
       </h3>

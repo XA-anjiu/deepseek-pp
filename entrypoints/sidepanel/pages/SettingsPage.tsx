@@ -52,9 +52,18 @@ export default function SettingsPage() {
   const [petOpacity, setPetOpacity] = useState(DEFAULT_PET_CONFIG.opacity);
   const [petMotion, setPetMotion] = useState(DEFAULT_PET_CONFIG.motion);
   const [chatEnabled, setChatEnabledState] = useState(false);
+  const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [apiKeyStatus, setApiKeyStatus] = useState<'idle' | 'saving' | 'clearing' | 'success' | 'error'>('idle');
+  const [apiKeyMessage, setApiKeyMessage] = useState('');
 
   useEffect(() => {
     getChatEnabled().then(setChatEnabledState);
+    chrome.runtime.sendMessage({ type: 'GET_DEEPSEEK_API_KEY_STATUS' })
+      .then((result: { configured?: boolean } | undefined) => {
+        setApiKeyConfigured(result?.configured === true);
+      })
+      .catch(() => setApiKeyConfigured(false));
   }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -267,6 +276,53 @@ export default function SettingsPage() {
     await savePetConfig({ motion });
   };
 
+  const handleSaveApiKey = async () => {
+    const apiKey = apiKeyInput.trim();
+    if (!apiKey) {
+      setApiKeyStatus('error');
+      setApiKeyMessage('请输入 DeepSeek API Key');
+      return;
+    }
+
+    setApiKeyStatus('saving');
+    setApiKeyMessage('');
+    try {
+      const result = await chrome.runtime.sendMessage({
+        type: 'SAVE_DEEPSEEK_API_KEY',
+        payload: { apiKey },
+      });
+      if (!result?.ok) throw new Error(result?.error || '保存失败');
+
+      if (!chatEnabled) {
+        await setChatEnabled(true);
+        setChatEnabledState(true);
+      }
+      setApiKeyConfigured(true);
+      setApiKeyInput('');
+      setApiKeyStatus('success');
+      setApiKeyMessage('已保存，右键场景可在普通网页使用');
+    } catch (error) {
+      setApiKeyStatus('error');
+      setApiKeyMessage(error instanceof Error ? error.message : '保存失败');
+    }
+  };
+
+  const handleClearApiKey = async () => {
+    setApiKeyStatus('clearing');
+    setApiKeyMessage('');
+    try {
+      const result = await chrome.runtime.sendMessage({ type: 'CLEAR_DEEPSEEK_API_KEY' });
+      if (!result?.ok) throw new Error(result?.error || '清除失败');
+      setApiKeyConfigured(false);
+      setApiKeyInput('');
+      setApiKeyStatus('success');
+      setApiKeyMessage('已清除，右键场景恢复为仅 DeepSeek 网页可用');
+    } catch (error) {
+      setApiKeyStatus('error');
+      setApiKeyMessage(error instanceof Error ? error.message : '清除失败');
+    }
+  };
+
   const updateField = (field: keyof SyncConfig, value: string) => {
     setSyncConfig((prev) => ({ ...prev, [field]: value }));
   };
@@ -467,7 +523,7 @@ export default function SettingsPage() {
                 侧边栏对话
               </div>
               <div className="text-[11px] mt-0.5" style={{ color: 'var(--ds-text-tertiary)' }}>
-                在侧边栏显示对话标签，支持 DeepSeek API 直连对话
+                在侧边栏显示对话标签，支持网页登录或官方 API Key
               </div>
             </div>
             <button
@@ -488,6 +544,72 @@ export default function SettingsPage() {
                 }}
               />
             </button>
+          </div>
+
+          <div
+            className="pt-3 border-t space-y-2"
+            style={{ borderColor: 'var(--ds-border)' }}
+          >
+            <div className="flex justify-between items-center gap-3">
+              <div>
+                <div className="text-xs font-medium" style={{ color: 'var(--ds-text)' }}>
+                  DeepSeek API Key
+                </div>
+                <div className="text-[11px] mt-0.5" style={{ color: 'var(--ds-text-tertiary)' }}>
+                  配置后右键场景可在普通网页使用
+                </div>
+              </div>
+              <span
+                className="shrink-0 text-[10px] px-2 py-0.5 rounded-full"
+                style={{
+                  color: apiKeyConfigured ? 'var(--ds-success)' : 'var(--ds-text-tertiary)',
+                  background: apiKeyConfigured ? 'var(--ds-success-bg)' : 'var(--ds-surface)',
+                }}
+              >
+                {apiKeyConfigured ? '已配置' : '未配置'}
+              </span>
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveApiKey()}
+                placeholder={apiKeyConfigured ? '输入新 Key 可替换' : 'sk-...'}
+                className={inputClass}
+                style={inputStyle}
+              />
+              <button
+                onClick={handleSaveApiKey}
+                disabled={!apiKeyInput.trim() || apiKeyStatus === 'saving'}
+                className="ds-btn-secondary shrink-0 px-3 py-2 text-[11px] font-medium rounded-lg transition-all duration-150 disabled:opacity-40"
+              >
+                {apiKeyStatus === 'saving' ? '保存中' : '保存'}
+              </button>
+            </div>
+
+            {apiKeyConfigured && (
+              <button
+                onClick={handleClearApiKey}
+                disabled={apiKeyStatus === 'clearing'}
+                className="ds-btn-secondary w-full py-2 text-[11px] font-medium rounded-lg transition-all duration-150 disabled:opacity-40"
+              >
+                {apiKeyStatus === 'clearing' ? '清除中' : '清除 API Key'}
+              </button>
+            )}
+
+            {apiKeyMessage && (
+              <div
+                className="text-[11px] px-3 py-2 rounded-lg"
+                style={{
+                  color: apiKeyStatus === 'error' ? 'var(--ds-danger)' : 'var(--ds-success)',
+                  background: apiKeyStatus === 'error' ? 'var(--ds-danger-bg)' : 'var(--ds-success-bg)',
+                }}
+              >
+                {apiKeyMessage}
+              </div>
+            )}
           </div>
 
           <div
@@ -648,6 +770,10 @@ export default function SettingsPage() {
             </button>
           )}
         </div>
+      </section>
+
+      <section className="space-y-3">
+        <ScenarioManager />
       </section>
 
       <section className="space-y-3">
@@ -958,9 +1084,6 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="space-y-3">
-        <ScenarioManager />
-      </section>
     </div>
   );
 }

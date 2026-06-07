@@ -24,7 +24,12 @@ const targets = [
   },
 ];
 
-const expectedHostPermissions = ['*://chat.deepseek.com/*', '*://cn.bing.com/*', '*://www.bing.com/*'];
+const expectedHostPermissions = [
+  '*://chat.deepseek.com/*',
+  'https://api.deepseek.com/*',
+  '*://cn.bing.com/*',
+  '*://www.bing.com/*',
+];
 const expectedOptionalHostPermissions = ['http://*/*', 'https://*/*'];
 
 for (const target of targets) {
@@ -65,7 +70,7 @@ assertIncludes(background, 'chrome.contextMenus.onClicked.addListener', 'context
 assertIncludes(background, 'chrome.sidePanel', 'sidePanel permission must use the side panel API');
 assertIncludes(wxtConfig, 'web_accessible_resources', 'web accessible resources must be declared in manifest config');
 
-for (const permission of ['storage', 'alarms', 'nativeMessaging', 'sidePanel']) {
+for (const permission of ['storage', 'alarms', 'contextMenus', 'nativeMessaging', 'sidePanel']) {
   assertIncludes(privacyPolicy, `\`${permission}\``, `privacy policy must document ${permission}`);
   assertIncludes(submission, `#### \`${permission}\``, `Chrome Web Store submission notes must justify ${permission}`);
 }

@@ -3,11 +3,20 @@ import type { ChatMessage as ChatMessageType } from '../../../core/types';
 import ChatMessage from '../components/ChatMessage';
 import { consumePendingText, onPendingText } from '../pending-text';
 
+type ChatProvider = 'official-api' | 'deepseek-web' | null;
+
+interface ChatAuthStatus {
+  available?: boolean;
+  provider?: ChatProvider;
+  hasApiKey?: boolean;
+  hasToken?: boolean;
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [inputText, setInputText] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
-  const [hasToken, setHasToken] = useState<boolean | null>(null);
+  const [authStatus, setAuthStatus] = useState<ChatAuthStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -28,22 +37,32 @@ export default function ChatPage() {
   // Check auth status on mount
   useEffect(() => {
     chrome.runtime.sendMessage({ type: 'GET_AUTH_STATUS' })
-      .then((resp: { hasToken?: boolean } | undefined) => {
-        setHasToken(resp?.hasToken ?? false);
+      .then((resp: ChatAuthStatus | undefined) => {
+        setAuthStatus({
+          available: resp?.available ?? resp?.hasToken ?? false,
+          provider: resp?.provider ?? (resp?.hasToken ? 'deepseek-web' : null),
+          hasApiKey: resp?.hasApiKey ?? false,
+          hasToken: resp?.hasToken ?? false,
+        });
       })
-      .catch(() => setHasToken(false));
+      .catch(() => setAuthStatus({ available: false, provider: null, hasApiKey: false, hasToken: false }));
   }, []);
 
   // Listen for streaming chunks and incoming text
   useEffect(() => {
-    const handler = (msg: { type: string; text?: string; done?: boolean; error?: string; hasToken?: boolean }) => {
+    const handler = (msg: { type: string; text?: string; done?: boolean; error?: string } & ChatAuthStatus) => {
       if (msg.type === 'CHAT_SET_INPUT_TEXT' && typeof msg.text === 'string') {
         setInputText(msg.text);
         inputRef.current?.focus();
         return;
       }
       if (msg.type === 'AUTH_STATUS_CHANGED') {
-        setHasToken(msg.hasToken ?? false);
+        setAuthStatus({
+          available: msg.available ?? msg.hasToken ?? false,
+          provider: msg.provider ?? (msg.hasToken ? 'deepseek-web' : null),
+          hasApiKey: msg.hasApiKey ?? false,
+          hasToken: msg.hasToken ?? false,
+        });
         return;
       }
       if (msg.type === 'CHAT_STREAM_CHUNK') {
@@ -107,14 +126,14 @@ export default function ChatPage() {
     }
   };
 
-  if (hasToken === false) {
+  if (authStatus?.available === false) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-6 text-center">
         <p className="text-sm mb-3" style={{ color: 'var(--ds-text-secondary)' }}>
-          请先在 chat.deepseek.com 登录并发一条消息
+          请配置 DeepSeek API Key，或先登录 chat.deepseek.com
         </p>
         <p className="text-xs" style={{ color: 'var(--ds-text-tertiary)' }}>
-          插件需要捕获你的登录凭证才能直接对话
+          未配置 Key 时，侧边栏对话依赖 DeepSeek 网页登录态
         </p>
       </div>
     );
@@ -124,7 +143,14 @@ export default function ChatPage() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2" style={{ borderBottom: '1px solid var(--ds-border)' }}>
-        <span className="text-sm font-medium" style={{ color: 'var(--ds-text)' }}>对话</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium" style={{ color: 'var(--ds-text)' }}>对话</span>
+          {authStatus?.provider && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: 'var(--ds-text-tertiary)', background: 'var(--ds-surface)' }}>
+              {authStatus.provider === 'official-api' ? 'API' : 'Web'}
+            </span>
+          )}
+        </div>
         <button
           onClick={newSession}
           className="text-xs px-2.5 py-1 rounded-md"

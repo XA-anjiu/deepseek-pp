@@ -69,6 +69,13 @@ import { getWebToolSettings, setWebToolEnabled } from '../core/tool/web-settings
 import { getAllScenarios, applyScenarioTemplate } from '../core/scenario/store';
 import { getChatEnabled } from '../core/chat/store';
 import {
+  clearDeepSeekApiKey,
+  DEEPSEEK_API_KEY_STORAGE_KEY,
+  getDeepSeekApiKey,
+  hasDeepSeekApiKey,
+  saveDeepSeekApiKey,
+} from '../core/chat/api-key';
+import {
   createAutomation,
   deleteAutomation,
   getAllAutomations,
@@ -92,6 +99,10 @@ import {
   submitPromptStreaming,
   loadClientHeadersFromStorage,
 } from '../core/deepseek/adapter';
+import {
+  submitOfficialDeepSeekStreaming,
+  type OfficialDeepSeekMessage,
+} from '../core/deepseek/official-api';
 import { createDeepSeekConversationExportTransport } from '../core/deepseek/conversation-export';
 import {
   buildConversationExportArtifactsCancellable,
@@ -112,6 +123,7 @@ const REFRESH_AUTH_MESSAGE = { type: 'REFRESH_DEEPSEEK_AUTH' } as const;
 const MISSING_DEEPSEEK_AUTH_MESSAGE = '请先在 chat.deepseek.com 登录，或刷新 DeepSeek 页面后重试。';
 let chatSessionId: string | null = null;
 let chatParentMessageId: number | null = null;
+let officialApiChatMessages: OfficialDeepSeekMessage[] = [];
 const conversationExportControllers = new Map<string, AbortController>();
 type SidePanelApi = {
   setPanelBehavior?: (options: { openPanelOnActionClick: boolean }) => Promise<void>;
@@ -142,8 +154,9 @@ export default defineBackground(() => {
   });
 
   chrome.storage.onChanged.addListener((changes) => {
-    if ('deepseek_pp_chat_enabled' in changes) {
+    if ('deepseek_pp_chat_enabled' in changes || DEEPSEEK_API_KEY_STORAGE_KEY in changes) {
       createContextMenus().catch(() => {});
+      broadcastChatAuthStatus().catch(() => {});
     }
   });
 });
@@ -178,6 +191,10 @@ async function createContextMenus() {
   try {
     await chrome.contextMenus.removeAll();
   } catch {}
+  const apiKeyConfigured = await hasDeepSeekApiKey();
+  const menuScope = apiKeyConfigured
+    ? {}
+    : { documentUrlPatterns: [DEEPSEEK_TAB_URL_PATTERN] };
   const scenarios = await getAllScenarios();
   const enabledScenarios = scenarios.filter((s) => s.enabled);
 
@@ -185,6 +202,7 @@ async function createContextMenus() {
     id: 'send-to-chat',
     title: '发送到对话',
     contexts: ['selection'],
+    ...menuScope,
   });
 
   if (enabledScenarios.length > 0) {
@@ -192,6 +210,7 @@ async function createContextMenus() {
       id: 'separator-1',
       type: 'separator',
       contexts: ['selection'],
+      ...menuScope,
     });
 
     for (const scenario of enabledScenarios) {
@@ -199,6 +218,7 @@ async function createContextMenus() {
         id: `scenario-${scenario.id}`,
         title: scenario.label,
         contexts: ['selection'],
+        ...menuScope,
       });
     }
   }
@@ -571,6 +591,25 @@ async function handleMessage(
     case 'GET_CONFIG':
       return { version: getExtensionVersion() };
 
+    case 'GET_DEEPSEEK_API_KEY_STATUS':
+      return { ok: true, configured: await hasDeepSeekApiKey() };
+
+    case 'SAVE_DEEPSEEK_API_KEY': {
+      const { apiKey } = message.payload as { apiKey?: string };
+      await saveDeepSeekApiKey(apiKey ?? '');
+      officialApiChatMessages = [];
+      await createContextMenus();
+      await broadcastChatAuthStatus(sender.tab?.id);
+      return { ok: true, configured: true };
+    }
+
+    case 'CLEAR_DEEPSEEK_API_KEY':
+      await clearDeepSeekApiKey();
+      officialApiChatMessages = [];
+      await createContextMenus();
+      await broadcastChatAuthStatus(sender.tab?.id);
+      return { ok: true, configured: false };
+
     case 'GET_DEEPSEEK_THEME':
       return getDeepSeekTheme();
 
@@ -690,11 +729,11 @@ async function handleMessage(
     case 'CHAT_NEW_SESSION':
       chatSessionId = null;
       chatParentMessageId = null;
+      officialApiChatMessages = [];
       return { ok: true };
 
     case 'GET_AUTH_STATUS': {
-      const headers = await loadOrRefreshClientHeaders(sender.tab?.id);
-      return { ok: true, hasToken: !!headers };
+      return getChatAuthStatus(sender.tab?.id);
     }
 
     case 'EXPORT_DEEPSEEK_CONVERSATIONS':
@@ -719,8 +758,7 @@ async function handleMessage(
     }
 
     case 'AUTH_STATUS_CHANGED': {
-      const newHeaders = await loadOrRefreshClientHeaders(sender.tab?.id);
-      broadcastToTabs({ type: 'AUTH_STATUS_CHANGED', hasToken: !!newHeaders }).catch(() => {});
+      await broadcastChatAuthStatus(sender.tab?.id);
       return { ok: true };
     }
 
@@ -873,6 +911,33 @@ async function broadcastAutomationUpdate(excludeTabId?: number) {
 
 async function broadcastAutomationRunsUpdate(excludeTabId?: number) {
   await broadcastToTabs({ type: 'AUTOMATION_RUNS_UPDATED' }, excludeTabId);
+}
+
+async function getChatAuthStatus(preferredTabId?: number) {
+  const hasApiKey = await hasDeepSeekApiKey();
+  if (hasApiKey) {
+    return {
+      ok: true,
+      available: true,
+      provider: 'official-api',
+      hasApiKey: true,
+      hasToken: false,
+    };
+  }
+
+  const headers = await loadOrRefreshClientHeaders(preferredTabId);
+  return {
+    ok: true,
+    available: !!headers,
+    provider: headers ? 'deepseek-web' : null,
+    hasApiKey: false,
+    hasToken: !!headers,
+  };
+}
+
+async function broadcastChatAuthStatus(preferredTabId?: number) {
+  const status = await getChatAuthStatus(preferredTabId);
+  chrome.runtime.sendMessage({ type: 'AUTH_STATUS_CHANGED', ...status }).catch(() => {});
 }
 
 async function broadcastConversationExportProgress(
@@ -1112,6 +1177,16 @@ function getSyncCounts(snapshot: SyncDataSnapshot): SyncCounts {
 }
 
 async function handleChatSubmitPrompt(prompt: string, excludeTabId?: number) {
+  const apiKey = await getDeepSeekApiKey();
+  if (apiKey) {
+    await handleOfficialApiChatSubmitPrompt(prompt, apiKey, excludeTabId);
+    return;
+  }
+
+  await handleWebChatSubmitPrompt(prompt, excludeTabId);
+}
+
+async function handleWebChatSubmitPrompt(prompt: string, excludeTabId?: number) {
   const headers = await loadOrRefreshClientHeaders(excludeTabId);
   if (!headers) {
     broadcastChatChunk({ text: '', done: true, error: MISSING_DEEPSEEK_AUTH_MESSAGE }, excludeTabId);
@@ -1124,20 +1199,7 @@ async function handleChatSubmitPrompt(prompt: string, excludeTabId?: number) {
       chatParentMessageId = null;
     }
 
-    const [memories, activePreset, toolDescriptors] = await Promise.all([
-      getAllMemories(),
-      getActivePreset(),
-      getRuntimeToolDescriptors(),
-    ]);
-
-    const enabledDescriptors = toolDescriptors.filter((t) => t.execution.enabled);
-
-    const { augmented } = buildPromptAugmentation(prompt, {
-      memories,
-      presetContent: activePreset?.content ?? null,
-      toolDescriptors: enabledDescriptors,
-      thinkingEnabled: false,
-    });
+    const { augmented, enabledDescriptors } = await buildSidepanelPrompt(prompt);
 
     const powHeaders = await createPowHeaders(headers);
 
@@ -1161,6 +1223,127 @@ async function handleChatSubmitPrompt(prompt: string, excludeTabId?: number) {
       chatSessionId = null;
     }
   }
+}
+
+async function handleOfficialApiChatSubmitPrompt(prompt: string, apiKey: string, excludeTabId?: number) {
+  try {
+    const [modelType, promptContext] = await Promise.all([
+      getModelType(),
+      buildSidepanelPrompt(prompt),
+    ]);
+
+    const initialMessages: OfficialDeepSeekMessage[] = [
+      ...officialApiChatMessages,
+      { role: 'user', content: promptContext.augmented },
+    ];
+
+    officialApiChatMessages = await runOfficialApiToolLoop(
+      {
+        apiKey,
+        modelType,
+        messages: initialMessages,
+      },
+      promptContext.enabledDescriptors,
+      excludeTabId,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    broadcastChatChunk({ text: '', done: true, error: msg }, excludeTabId);
+  }
+}
+
+async function buildSidepanelPrompt(prompt: string): Promise<{
+  augmented: string;
+  enabledDescriptors: ToolDescriptor[];
+}> {
+  const [memories, activePreset, toolDescriptors] = await Promise.all([
+    getAllMemories(),
+    getActivePreset(),
+    getRuntimeToolDescriptors(),
+  ]);
+
+  const enabledDescriptors = toolDescriptors.filter((t) => t.execution.enabled);
+  const { augmented } = buildPromptAugmentation(prompt, {
+    memories,
+    presetContent: activePreset?.content ?? null,
+    toolDescriptors: enabledDescriptors,
+    thinkingEnabled: false,
+  });
+
+  return { augmented, enabledDescriptors };
+}
+
+async function runOfficialApiToolLoop(
+  input: {
+    apiKey: string;
+    modelType: ModelType;
+    messages: OfficialDeepSeekMessage[];
+  },
+  toolDescriptors: ToolDescriptor[],
+  excludeTabId?: number,
+): Promise<OfficialDeepSeekMessage[]> {
+  const MAX_STEPS = 20;
+  let currentMessages = [...input.messages];
+
+  for (let step = 0; step < MAX_STEPS; step++) {
+    let accumulated = '';
+    const turn = await submitOfficialDeepSeekStreaming({
+      apiKey: input.apiKey,
+      modelType: input.modelType,
+      messages: currentMessages,
+    }, {
+      onTextChunk(newText: string, fullText: string) {
+        accumulated = fullText;
+        broadcastChatChunk({ text: newText, done: false }, excludeTabId);
+      },
+    });
+
+    const fullText = accumulated || turn.assistantText;
+
+    if (!fullText) {
+      broadcastChatChunk({ text: '', done: true }, excludeTabId);
+      return currentMessages;
+    }
+
+    currentMessages = [...currentMessages, { role: 'assistant', content: fullText }];
+    const toolCalls = extractToolCalls(fullText, { descriptors: toolDescriptors });
+
+    if (toolCalls.length === 0) {
+      broadcastChatChunk({ text: '', done: true }, excludeTabId);
+      return currentMessages;
+    }
+
+    const execs: ToolExecutionRecord[] = [];
+    for (const call of toolCalls) {
+      const result = await executeRuntimeToolCall(call, 'sidepanel_chat');
+      execs.push({
+        name: call.name,
+        result: {
+          ok: result.ok,
+          summary: result.summary,
+          detail: result.detail,
+          output: result.output,
+          truncated: result.truncated,
+          error: result.error,
+        },
+      });
+    }
+
+    const toolResultsText = execs.map((e) =>
+      `<${e.name}_result>\n${JSON.stringify(e.result)}\n</${e.name}_result>`
+    ).join('\n');
+
+    currentMessages = [
+      ...currentMessages,
+      {
+        role: 'user',
+        content: `[TOOL_RESULTS]\n${toolResultsText}\n[/TOOL_RESULTS]\n\n请根据上述工具执行结果继续回答。`,
+      },
+    ];
+  }
+
+  broadcastChatChunk({ text: '(达到最大工具调用步数，对话结束)', done: true }, excludeTabId);
+  return currentMessages;
 }
 
 async function runSidepanelToolLoop(
