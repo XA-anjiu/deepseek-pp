@@ -27,7 +27,7 @@
   <a href="#功能速览">功能速览</a> ·
   <a href="#适合场景">适合场景</a> ·
   <a href="#安装">安装</a> ·
-  <a href="#062-变更回顾">0.6.2 变更</a>
+  <a href="#063-变更回顾">0.6.3 变更</a>
 </p>
 
 DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的 Chrome / Edge / Firefox 浏览器扩展，提供侧边栏对话、类原生工具调用、内置网络工具、MCP 工具系统、长期记忆、Skill、系统提示词预设、对话导出、Agent 式持续执行和自动化任务。
@@ -39,7 +39,7 @@ DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的 Chrome /
 - [功能速览](#功能速览)
 - [适合场景](#适合场景)
 - [核心功能](#核心功能)
-- [0.6.2 变更回顾](#062-变更回顾)
+- [0.6.3 变更回顾](#063-变更回顾)
 - [安装](#安装)
 - [友情链接](#友情链接)
 
@@ -214,7 +214,22 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
   <img src="assets/screenshot-sidepanel-automation.svg" width="300" alt="自动化任务侧边栏">
 </p>
 
-## 0.6.2 变更回顾
+## 0.6.3 变更回顾
+
+0.6.3 是对话导出入口收口版本，重点把导出操作放回 DeepSeek 回复工具栏，让归档当前对话更贴近日常阅读和整理流程。
+
+| 方向 | 主要变化 |
+|------|----------|
+| 回复工具栏导出 | 在 DeepSeek 回复下方的官方操作按钮同一排选择导出格式，不再需要切到单独侧边栏页面。 |
+| 导出格式 | 当前对话可导出为 HTML、Markdown 或 PDF 文件，适合阅读、归档和分享前整理。 |
+| 归档质量 | 文件名、附件引用、消息元数据和可读模式继续收敛，导出内容更容易检索和长期保存。 |
+| 隐私说明 | 商店文案和隐私说明同步到本地下载口径，明确导出文件通过浏览器本地保存。 |
+| 测试保障 | 对话导出测试覆盖回复工具栏入口、格式选择、命名和 PDF 导出路径。 |
+
+<details>
+<summary>展开 0.6.2 变更回顾</summary>
+
+### 0.6.2 变更回顾
 
 0.6.2 是对话导出和跨平台 Shell 体验增强版本，重点让用户可以本地归档 DeepSeek 对话，并提升 Windows 本机命令链路的稳定性。
 
@@ -225,6 +240,8 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
 | Shell MCP | Windows Shell Host 的路径解析和中文输出更可靠，减少本机命令执行时的乱码和找不到命令问题。 |
 | 测试保障 | 新增 Vitest 单元测试覆盖请求增强、MCP 传输、记忆工具、同步 schema、Shell policy 和导出流程。 |
 | 发布保障 | Release workflow 会在发布前校验版本一致性，并确认 Shell Host npm 包可见后再上传浏览器扩展资产。 |
+
+</details>
 
 <details>
 <summary>展开 0.6.1 变更回顾</summary>

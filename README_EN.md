@@ -27,7 +27,7 @@
   <a href="#feature-overview">Feature Overview</a> ·
   <a href="#use-cases">Use Cases</a> ·
   <a href="#installation">Installation</a> ·
-  <a href="#062-release-highlights">0.6.2 Highlights</a>
+  <a href="#063-release-highlights">0.6.3 Highlights</a>
 </p>
 
 DeepSeek++ is a Chrome / Edge / Firefox browser extension for [DeepSeek Web](https://chat.deepseek.com). It adds side-panel chat, native-feeling tool execution, built-in web tools, MCP tools, long-term memory, Skills, system prompt presets, conversation export, agentic continuation, and automation tasks.
@@ -39,7 +39,7 @@ It can send selected web-page text to DeepSeek, keep working through multi-step 
 - [Feature Overview](#feature-overview)
 - [Use Cases](#use-cases)
 - [Core Features](#core-features)
-- [0.6.2 Release Highlights](#062-release-highlights)
+- [0.6.3 Release Highlights](#063-release-highlights)
 - [Installation](#installation)
 - [Friendly Links](#friendly-links)
 
@@ -214,7 +214,22 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
   <img src="assets/screenshot-sidepanel-automation.svg" width="300" alt="Automation task side panel">
 </p>
 
-## 0.6.2 Release Highlights
+## 0.6.3 Release Highlights
+
+0.6.3 focuses the conversation export flow around the DeepSeek reply toolbar, making current-conversation archiving fit the normal reading and review workflow.
+
+| Area | Main changes |
+|------|--------------|
+| Reply-toolbar export | Choose an export format from the same row as DeepSeek's official reply actions, without switching to a separate side-panel page. |
+| Export formats | Save the current conversation as HTML, Markdown, or PDF files for reading, archiving, and pre-share cleanup. |
+| Archive quality | File names, attachment references, message metadata, and readable mode are refined for easier search and long-term storage. |
+| Privacy copy | Store listing and privacy copy now match the local-download flow, making it clear that export files are saved through the browser. |
+| Test coverage | Conversation export tests cover the reply-toolbar entry point, format selection, naming, and PDF export path. |
+
+<details>
+<summary>Show 0.6.2 release highlights</summary>
+
+### 0.6.2 Release Highlights
 
 0.6.2 focuses on conversation export and cross-platform Shell reliability. It lets users archive DeepSeek conversations locally and improves native command execution on Windows.
 
@@ -225,6 +240,8 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
 | Shell MCP | Windows Shell Host path handling and Chinese command output are more reliable, reducing encoding and command lookup issues. |
 | Test coverage | Adds Vitest unit coverage for request augmentation, MCP transport, memory tools, sync schema, Shell policy, and conversation export. |
 | Release safeguards | The release workflow checks version consistency and confirms Shell Host npm visibility before uploading browser extension assets. |
+
+</details>
 
 <details>
 <summary>Show 0.6.1 release highlights</summary>
