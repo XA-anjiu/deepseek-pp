@@ -1,19 +1,25 @@
 import type { GitHubSkillSource, Skill } from '../types';
-import { BUILTIN_SKILLS } from './builtin';
+import { DEFAULT_LOCALE, type SupportedLocale } from '../i18n';
+import { BUILTIN_SKILLS, getLocalizedBuiltinSkills } from './builtin';
 
 const STORAGE_KEY = 'deepseek_pp_skills';
 const SOURCES_STORAGE_KEY = 'deepseek_pp_skill_sources';
 
 const USER_SKILL_SOURCES = new Set(['custom', 'remote']);
 
-export async function getAllSkills(options: { includeDisabled?: boolean } = {}): Promise<Skill[]> {
-  const skills = [...BUILTIN_SKILLS, ...await getUserSkills()];
+export async function getAllSkills(
+  options: { includeDisabled?: boolean; locale?: SupportedLocale } = {},
+): Promise<Skill[]> {
+  const skills = [
+    ...getLocalizedBuiltinSkills(options.locale ?? DEFAULT_LOCALE),
+    ...await getUserSkills(),
+  ];
   if (options.includeDisabled) return skills;
   return skills.filter((skill) => skill.enabled !== false);
 }
 
-export async function getSkillLibrary(): Promise<Skill[]> {
-  return getAllSkills({ includeDisabled: true });
+export async function getSkillLibrary(locale: SupportedLocale = DEFAULT_LOCALE): Promise<Skill[]> {
+  return getAllSkills({ includeDisabled: true, locale });
 }
 
 export async function getUserSkills(): Promise<Skill[]> {
@@ -72,7 +78,7 @@ export async function setSkillEnabled(name: string, enabled: boolean): Promise<v
     found = true;
     return { ...skill, enabled };
   });
-  if (!found) throw new Error(`找不到可启停的 Skill: ${name}`);
+  if (!found) throw new Error(`Skill cannot be enabled or disabled because it was not found: ${name}`);
   await chrome.storage.local.set({ [STORAGE_KEY]: next });
 }
 
@@ -195,12 +201,12 @@ function createUniqueSkillName(preferred: string, occupiedNames: Set<string>): s
     const candidate = `${normalized}-${suffix}`;
     if (!occupiedNames.has(candidate)) return candidate;
   }
-  throw new Error(`无法为远程 Skill 生成唯一名称: ${preferred}`);
+  throw new Error(`Unable to generate a unique name for remote Skill: ${preferred}`);
 }
 
 function normalizeSkillName(name: string): string {
   const normalized = name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-  if (!normalized) throw new Error('Skill 名称不能为空');
+  if (!normalized) throw new Error('Skill name cannot be empty');
   return normalized;
 }
 

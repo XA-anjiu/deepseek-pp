@@ -6,6 +6,7 @@ import {
   type SubmitPromptInput,
 } from '../deepseek/adapter';
 import { extractToolCalls, stripToolCalls } from '../interceptor/tool-parser';
+import { DEFAULT_LOCALE } from '../i18n';
 import { executeToolCallsSequentially } from '../tool-loop/engine';
 import type { ToolCall, ToolDescriptor, ToolExecutionRecord } from '../types';
 import type { ToolParsingInput } from '../tool/invocation';
@@ -46,6 +47,7 @@ export async function runInlineAgentLoop(
   const { post, executeTool, signal } = deps;
   const { loopId, chatSessionId, toolDescriptors, promptOptions } = payload;
   const { powWasmUrl } = payload;
+  const locale = payload.locale ?? DEFAULT_LOCALE;
   const parsingInput: ToolParsingInput = { descriptors: toolDescriptors };
 
   let parentMessageId: number | null = payload.parentMessageId;
@@ -64,7 +66,7 @@ export async function runInlineAgentLoop(
         if (signal.aborted) break;
       }
 
-      const prompt = buildContinuationPrompt(payload.originalPrompt, allExecutions);
+      const prompt = buildContinuationPrompt(payload.originalPrompt, allExecutions, locale);
       const powHeaders = await createPowHeaders(clientHeaders, powWasmUrl);
 
       post('AGENT_STEP_STARTED', { loopId, stepIndex: step });
@@ -152,7 +154,7 @@ export async function runInlineAgentLoop(
           break;
         }
 
-        const nudgePrompt = buildNudgePrompt(payload.originalPrompt, visibleText, allExecutions, nudgeCount);
+        const nudgePrompt = buildNudgePrompt(payload.originalPrompt, visibleText, allExecutions, nudgeCount, locale);
         const nudgeInput: SubmitPromptInput = {
           ...input,
           prompt: nudgePrompt,
@@ -247,7 +249,7 @@ export async function runInlineAgentLoop(
         }
 
         const powHeaders = await createPowHeaders(clientHeaders, powWasmUrl);
-        const finalizationPrompt = buildFinalizationPrompt(payload.originalPrompt, allExecutions);
+        const finalizationPrompt = buildFinalizationPrompt(payload.originalPrompt, allExecutions, locale);
         const finalInput: SubmitPromptInput = {
           chatSessionId,
           parentMessageId,

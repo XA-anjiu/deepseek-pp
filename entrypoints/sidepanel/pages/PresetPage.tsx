@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { SystemPromptPreset } from '../../../core/types';
 import PresetCard from '../components/PresetCard';
 import PresetForm from '../components/PresetForm';
+import { useI18n } from '../i18n';
 
 export default function PresetPage() {
+  const { t } = useI18n();
   const [presets, setPresets] = useState<SystemPromptPreset[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -84,7 +86,7 @@ export default function PresetPage() {
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>
-          系统提示词预设
+          {t('sidepanel.presetPage.title')}
         </h2>
         <div className="flex items-center gap-1.5">
           <input
@@ -102,7 +104,7 @@ export default function PresetPage() {
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
             </svg>
-            导入
+            {t('sidepanel.presetPage.import')}
           </button>
           <button
             onClick={() => { setEditing(undefined); setShowForm(!showForm); }}
@@ -111,7 +113,7 @@ export default function PresetPage() {
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
-            新建
+            {t('sidepanel.presetPage.create')}
           </button>
         </div>
       </div>
@@ -139,7 +141,7 @@ export default function PresetPage() {
       {presets.length === 0 && !showForm && (
         <div className="ds-info-panel rounded-xl p-3.5">
           <p className="text-xs leading-relaxed" style={{ color: 'var(--ds-text-secondary)' }}>
-            创建系统提示词预设后，选中即可在每次新对话的第一条消息前自动注入，无需手动触发。
+            {t('sidepanel.presetPage.emptyHelp')}
           </p>
         </div>
       )}
@@ -147,7 +149,7 @@ export default function PresetPage() {
       {presets.length > 0 && (
         <div className="ds-info-panel rounded-xl p-3.5">
           <p className="text-xs leading-relaxed" style={{ color: 'var(--ds-text-secondary)' }}>
-            启用一个预设后，每次新对话的首条消息会自动注入该提示词。同一时间只能激活一个预设。
+            {t('sidepanel.presetPage.activeHelp')}
           </p>
         </div>
       )}

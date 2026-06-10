@@ -3,6 +3,22 @@ import assert from 'node:assert/strict';
 
 const TOOL_NAME = 'echo';
 const INVOCATION_NAME = 'mcp_mock_echo';
+const PROMPT_COPY = {
+  en: {
+    runner: 'You are now the DeepSeek++ managed automation continuation runner, taking over the next execution steps in the web chat.',
+    task: 'Keep advancing the same original user task until it is complete, deliverable, or blocked by an unrecoverable issue.',
+    results: 'These are the MCP tool results that were just executed automatically. Continue completing the user task based on these results.',
+    enough: 'If the results are enough, give the final answer directly. Only continue calling available MCP tools when more information, verification, or file changes are truly needed.',
+    noPseudo: 'Do not output pseudo tool-call JSON. When a tool call is needed, output only executable XML tool tags.',
+  },
+  'zh-CN': {
+    runner: '你现在是 DeepSeek++ 托管自动化续跑器，正在接管网页对话区的后续执行。',
+    task: '请持续围绕同一个原始用户任务推进，直到任务完成、达到可交付状态，或遇到不可恢复阻塞。',
+    results: '以下是刚才自动执行的 MCP 工具结果。请基于这些结果继续完成用户任务。',
+    enough: '如果结果已经足够，请直接给出最终回答；只有确实需要更多信息、继续验证或继续修改文件时，才继续调用可用 MCP 工具。',
+    noPseudo: '不要输出伪工具调用 JSON；需要调用工具时只输出可执行 XML 工具标签。',
+  },
+};
 
 const serverConfig = {
   id: 'mock',
@@ -76,12 +92,13 @@ async function verifyManualContinuation() {
   assert.equal(executions[0].result.ok, true);
   assert.equal(executions[0].result.output.echoed, 'manual');
 
-  const continuation = buildToolResultsPrompt('Create a file and verify it.', executions);
+  const continuation = buildToolResultsPrompt('Create a file and verify it.', executions, 'en');
   assert.match(continuation, /<tool_results>/);
   assert.match(continuation, /<original_user_task>/);
   assert.match(continuation, /Create a file and verify it/);
   assert.match(continuation, /manual/);
-  assert.match(continuation, /继续调用可用 MCP 工具/);
+  assert.match(continuation, /continue calling available MCP tools/);
+  assert.match(buildToolResultsPrompt('创建并验证文件。', executions, 'zh-CN'), /继续调用可用 MCP 工具/);
   assert.equal(executeToolCallsInManualContinuation(
     '<memory_save>{"type":"topic","name":"n","content":"c","tags":[]}</memory_save>',
   ).length, 0);
@@ -103,7 +120,7 @@ async function verifyAutomationContinuation() {
       result: execution.result,
     })));
 
-    const continuation = buildToolResultsPrompt('Run automation and produce the final answer.', executions);
+    const continuation = buildToolResultsPrompt('Run automation and produce the final answer.', executions, 'en');
     assert.match(continuation, /<original_user_task>/);
     assert.match(continuation, /automation/);
     assistantText = 'Final answer after tool results.';
@@ -159,7 +176,7 @@ async function callMcpTool(call) {
   const output = result.structuredContent ?? null;
   return {
     ok: result.isError !== true,
-    summary: result.isError ? 'MCP 工具返回错误' : 'MCP 工具已执行',
+    summary: result.isError ? 'MCP tool returned an error' : 'MCP tool executed',
     detail: JSON.stringify(output, null, 2),
     output,
     provider: call.provider,
@@ -168,7 +185,8 @@ async function callMcpTool(call) {
   };
 }
 
-function buildToolResultsPrompt(originalTask, executions) {
+function buildToolResultsPrompt(originalTask, executions, locale = 'en') {
+  const copy = PROMPT_COPY[locale] ?? PROMPT_COPY.en;
   const lines = executions.map((execution, index) => JSON.stringify({
     index: index + 1,
     tool: execution.call.name,
@@ -178,16 +196,16 @@ function buildToolResultsPrompt(originalTask, executions) {
     output: execution.result.output,
   }));
   return [
-    '你现在是 DeepSeek++ 托管自动化续跑器，正在接管网页对话区的后续执行。',
-    '请持续围绕同一个原始用户任务推进，直到任务完成、达到可交付状态，或遇到不可恢复阻塞。',
+    copy.runner,
+    copy.task,
     '',
     '<original_user_task>',
     originalTask,
     '</original_user_task>',
     '',
-    '以下是刚才自动执行的 MCP 工具结果。请基于这些结果继续完成用户任务。',
-    '如果结果已经足够，请直接给出最终回答；只有确实需要更多信息、继续验证或继续修改文件时，才继续调用可用 MCP 工具。',
-    '不要输出伪工具调用 JSON；需要调用工具时只输出可执行 XML 工具标签。',
+    copy.results,
+    copy.enough,
+    copy.noPseudo,
     '',
     '<tool_results>',
     lines.join('\n'),

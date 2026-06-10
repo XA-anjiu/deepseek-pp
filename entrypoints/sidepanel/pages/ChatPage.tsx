@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { ChatMessage as ChatMessageType } from '../../../core/types';
 import ChatMessage from '../components/ChatMessage';
 import { consumePendingText, onPendingText } from '../pending-text';
+import { useI18n } from '../i18n';
 
 type ChatProvider = 'official-api' | 'deepseek-web' | null;
 
@@ -13,6 +14,7 @@ interface ChatAuthStatus {
 }
 
 export default function ChatPage() {
+  const { t } = useI18n();
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [inputText, setInputText] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -130,10 +132,10 @@ export default function ChatPage() {
     return (
       <div className="flex flex-col items-center justify-center h-full p-6 text-center">
         <p className="text-sm mb-3" style={{ color: 'var(--ds-text-secondary)' }}>
-          请配置 DeepSeek API Key，或先登录 chat.deepseek.com
+          {t('sidepanel.chatPage.authRequired')}
         </p>
         <p className="text-xs" style={{ color: 'var(--ds-text-tertiary)' }}>
-          未配置 Key 时，侧边栏对话依赖 DeepSeek 网页登录态
+          {t('sidepanel.chatPage.authHint')}
         </p>
       </div>
     );
@@ -144,7 +146,7 @@ export default function ChatPage() {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2" style={{ borderBottom: '1px solid var(--ds-border)' }}>
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium" style={{ color: 'var(--ds-text)' }}>对话</span>
+          <span className="text-sm font-medium" style={{ color: 'var(--ds-text)' }}>{t('sidepanel.chatPage.title')}</span>
           {authStatus?.provider && (
             <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: 'var(--ds-text-tertiary)', background: 'var(--ds-surface)' }}>
               {authStatus.provider === 'official-api' ? 'API' : 'Web'}
@@ -155,9 +157,9 @@ export default function ChatPage() {
           onClick={newSession}
           className="text-xs px-2.5 py-1 rounded-md"
           style={{ color: 'var(--ds-text-tertiary)', background: 'var(--ds-surface)' }}
-          title="新建会话"
+          title={t('sidepanel.chatPage.newSessionTitle')}
         >
-          新建
+          {t('sidepanel.chatPage.newSession')}
         </button>
       </div>
 
@@ -165,7 +167,7 @@ export default function ChatPage() {
       <div ref={listRef} className="flex-1 overflow-y-auto p-3">
         {messages.length === 0 && !isStreaming && (
           <div className="flex items-center justify-center h-full text-xs" style={{ color: 'var(--ds-text-tertiary)' }}>
-            输入消息开始对话
+            {t('sidepanel.chatPage.empty')}
           </div>
         )}
         {messages.map((msg, i) => (
@@ -188,7 +190,7 @@ export default function ChatPage() {
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
+            placeholder={t('sidepanel.chatPage.inputPlaceholder')}
             rows={2}
             className="flex-1 resize-none rounded-lg px-3 py-2 text-sm outline-none"
             style={{ background: 'var(--ds-surface)', color: 'var(--ds-text)', border: '1px solid var(--ds-border)' }}
@@ -199,7 +201,7 @@ export default function ChatPage() {
             className="self-end px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-40"
             style={{ background: 'var(--ds-accent)', color: '#fff' }}
           >
-            {isStreaming ? '...' : '发送'}
+            {isStreaming ? '...' : t('sidepanel.chatPage.send')}
           </button>
         </div>
       </div>

@@ -8,6 +8,9 @@ const rootDir = dirname(fileURLToPath(import.meta.url));
 const safeWxtBrowser = resolve(rootDir, 'core/browser/safe-wxt-browser.ts');
 const CHROMIUM_BROWSERS = new Set(['chrome', 'edge']);
 const extensionVersion = readPackageVersion();
+const MANIFEST_NAME = '__MSG_extension_name__';
+const MANIFEST_DESCRIPTION = '__MSG_extension_description__';
+const MANIFEST_ACTION_TITLE = '__MSG_extension_action_title__';
 
 function readPackageVersion(): string {
   const packageJson = JSON.parse(
@@ -27,8 +30,9 @@ function createManifest(env: ConfigEnv): UserManifest {
   const permissions = ['storage', 'alarms', 'nativeMessaging', 'contextMenus'];
 
   return {
-    name: 'DeepSeek++',
-    description: 'Agentic memory, skills, agentic execution, automation, and MCP tools for DeepSeek',
+    default_locale: 'en',
+    name: MANIFEST_NAME,
+    description: MANIFEST_DESCRIPTION,
     version: extensionVersion,
     permissions: isChromiumTarget ? [...permissions, 'sidePanel'] : permissions,
     optional_host_permissions: ['http://*/*', 'https://*/*'],
@@ -42,7 +46,7 @@ function createManifest(env: ConfigEnv): UserManifest {
     }],
     ...(isChromiumTarget ? {
       action: {
-        default_title: 'DeepSeek++',
+        default_title: MANIFEST_ACTION_TITLE,
       },
       side_panel: {
         default_path: 'sidepanel.html',

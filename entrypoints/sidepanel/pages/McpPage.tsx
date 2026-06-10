@@ -4,6 +4,7 @@ import {
   SHELL_MCP_SERVER_NAME,
   createShellMcpPresetInput,
 } from '../../../core/shell';
+import type { LocaleMessageKey, MessageParams, SupportedLocale } from '../../../core/i18n';
 import type {
   McpHeaderValue,
   McpSecretValue,
@@ -17,10 +18,12 @@ import type {
   ToolDescriptor,
   ToolExecutionMode,
 } from '../../../core/types';
+import { useI18n } from '../i18n';
 
 type McpTransportKind = McpServerTransportConfig['kind'];
 type CacheByServer = Record<string, McpToolCacheEntry | null>;
 type BusyAction = 'refresh' | 'test' | 'permission';
+type Translator = (key: LocaleMessageKey, params?: MessageParams) => string;
 
 type FormState = {
   displayName: string;
@@ -43,12 +46,12 @@ type FormState = {
   executionMode: ToolExecutionMode;
 };
 
-const TRANSPORT_OPTIONS: { kind: McpTransportKind; label: string; hint: string }[] = [
-  { kind: 'streamable_http', label: 'Streamable HTTP', hint: '推荐，兼容新版 MCP HTTP 服务' },
-  { kind: 'http', label: 'HTTP', hint: 'JSON-RPC over HTTP POST' },
-  { kind: 'sse', label: 'SSE', hint: '旧版 MCP SSE 传输' },
-  { kind: 'stdio_bridge', label: 'Stdio Bridge', hint: '本地桥接服务负责启动 stdio MCP 和文件访问边界' },
-  { kind: 'native_messaging', label: 'Native', hint: '通过 Browser Native Messaging Host 访问本机能力' },
+const TRANSPORT_OPTIONS: { kind: McpTransportKind; label: string; hintKey: LocaleMessageKey }[] = [
+  { kind: 'streamable_http', label: 'Streamable HTTP', hintKey: 'sidepanel.mcpPage.transportHints.streamableHttp' },
+  { kind: 'http', label: 'HTTP', hintKey: 'sidepanel.mcpPage.transportHints.http' },
+  { kind: 'sse', label: 'SSE', hintKey: 'sidepanel.mcpPage.transportHints.sse' },
+  { kind: 'stdio_bridge', label: 'Stdio Bridge', hintKey: 'sidepanel.mcpPage.transportHints.stdioBridge' },
+  { kind: 'native_messaging', label: 'Native', hintKey: 'sidepanel.mcpPage.transportHints.nativeMessaging' },
 ];
 
 const DEFAULT_FORM: FormState = {
@@ -73,6 +76,7 @@ const DEFAULT_FORM: FormState = {
 };
 
 export default function McpPage() {
+  const { t, locale } = useI18n();
   const [servers, setServers] = useState<McpServerConfig[]>([]);
   const [caches, setCaches] = useState<CacheByServer>({});
   const [history, setHistory] = useState<ToolCallHistoryRecord[]>([]);
@@ -120,7 +124,7 @@ export default function McpPage() {
       });
       setHistory(recent ?? []);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : '加载 MCP 配置失败');
+      setMessage(err instanceof Error ? err.message : t('sidepanel.mcpPage.messages.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -170,7 +174,7 @@ export default function McpPage() {
     );
     if (existing) {
       setSelectedId(existing.id);
-      setMessage('Shell MCP 已存在，已选中现有配置');
+      setMessage(t('sidepanel.mcpPage.messages.shellExistsSelected'));
       return;
     }
 
@@ -179,11 +183,11 @@ export default function McpPage() {
       payload: createShellMcpPresetInput(),
     });
     if (!server) {
-      setMessage('创建 Shell MCP 预设失败');
+      setMessage(t('sidepanel.mcpPage.messages.shellCreateFailed'));
       return;
     }
     setSelectedId(server.id);
-    setMessage('已创建 Shell MCP 预设。请运行下方安装命令后重启浏览器。');
+    setMessage(t('sidepanel.mcpPage.messages.shellCreated'));
     await load();
   };
 
@@ -206,7 +210,7 @@ export default function McpPage() {
       : await chrome.runtime.sendMessage({ type: 'CREATE_MCP_SERVER', payload: requestPayload });
 
     if (!response) {
-      setMessage('保存 MCP 服务失败');
+      setMessage(t('sidepanel.mcpPage.messages.saveFailed'));
       return;
     }
 
@@ -217,7 +221,7 @@ export default function McpPage() {
   };
 
   const removeServer = async (server: McpServerConfig) => {
-    if (!confirm(`删除 MCP 服务「${server.displayName}」？`)) return;
+    if (!confirm(t('sidepanel.mcpPage.messages.deleteConfirm', { name: server.displayName }))) return;
     await chrome.runtime.sendMessage({ type: 'DELETE_MCP_SERVER', payload: { id: server.id } });
     if (selectedId === server.id) setSelectedId(null);
     await load();
@@ -236,7 +240,9 @@ export default function McpPage() {
     setMessage('');
     try {
       const result = await requestMcpOriginPermission(server);
-      setMessage(result?.ok ? `已授权 ${result.origin ?? '本地宿主'}` : (result?.error ?? '授权被拒绝'));
+      setMessage(result?.ok
+        ? t('sidepanel.mcpPage.messages.permissionGranted', { origin: result.origin ?? t('sidepanel.mcpPage.localHost') })
+        : (result?.error ?? t('sidepanel.mcpPage.messages.permissionDenied')));
     } finally {
       setBusyState(server.id, null);
     }
@@ -249,7 +255,9 @@ export default function McpPage() {
       if (requiresOriginPermission(server)) {
         const permission = await requestMcpOriginPermission(server);
         if (!permission?.ok) {
-          setMessage(permission?.error ?? `需要授权 ${permission?.origin ?? 'MCP 主机'}`);
+          setMessage(permission?.error ?? t('sidepanel.mcpPage.messages.permissionRequired', {
+            origin: permission?.origin ?? 'MCP Host',
+          }));
           return;
         }
       }
@@ -261,8 +269,11 @@ export default function McpPage() {
       if (cache) {
         setCaches((prev) => ({ ...prev, [server.id]: cache }));
         setMessage(cache.health.status === 'ready'
-          ? `连接成功，${cache.health.toolCount} 个工具，${formatMs(cache.health.latencyMs)}`
-          : cache.health.error ?? '连接失败');
+          ? t('sidepanel.mcpPage.messages.connectionSuccess', {
+            tools: cache.health.toolCount,
+            latency: formatMs(cache.health.latencyMs),
+          })
+          : cache.health.error ?? t('sidepanel.mcpPage.messages.connectionFailed'));
       }
       await load();
     } finally {
@@ -285,10 +296,14 @@ export default function McpPage() {
       <div className="flex items-center justify-between gap-2">
         <div>
           <h2 className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>
-            MCP
+            {t('sidepanel.mcpPage.title')}
           </h2>
           <div className="text-[11px] mt-0.5" style={{ color: 'var(--ds-text-tertiary)' }}>
-            {servers.length} 个服务，{enabledCount} 个启用，{toolCount} 个自动工具
+            {t('sidepanel.mcpPage.summary', {
+              servers: servers.length,
+              enabled: enabledCount,
+              tools: toolCount,
+            })}
           </div>
         </div>
         <div className="flex items-center gap-1.5">
@@ -296,7 +311,7 @@ export default function McpPage() {
             onClick={createShellPreset}
             className="ds-btn-secondary px-3 py-1.5 text-xs rounded-lg transition-all duration-150"
           >
-            Shell
+            {t('sidepanel.mcpPage.shell')}
           </button>
           <button
             onClick={startCreate}
@@ -305,7 +320,7 @@ export default function McpPage() {
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
-            新增
+            {t('sidepanel.mcpPage.addServer')}
           </button>
         </div>
       </div>
@@ -328,9 +343,9 @@ export default function McpPage() {
       )}
 
       {loading && servers.length === 0 ? (
-        <EmptyState label="正在加载 MCP 配置" />
+        <EmptyState label={t('sidepanel.mcpPage.loading')} />
       ) : servers.length === 0 && !showForm ? (
-        <EmptyState label="暂无 MCP 服务" />
+        <EmptyState label={t('sidepanel.mcpPage.empty')} />
       ) : (
         <div className="space-y-3">
           <div className="space-y-2">
@@ -347,6 +362,7 @@ export default function McpPage() {
                 onDelete={() => removeServer(server)}
                 onRefresh={() => refreshServer(server, 'refresh')}
                 onTest={() => refreshServer(server, 'test')}
+                t={t}
               />
             ))}
           </div>
@@ -362,6 +378,8 @@ export default function McpPage() {
               onRefresh={() => refreshServer(selected, 'refresh')}
               onTest={() => refreshServer(selected, 'test')}
               onToggleTool={(tool) => toggleTool(selected, tool)}
+              t={t}
+              locale={locale}
             />
           )}
         </div>
@@ -379,6 +397,7 @@ function McpServerForm({
   onSave: (payload: McpServerCreateInput) => Promise<void>;
   onCancel: () => void;
 }) {
+  const { t } = useI18n();
   const [form, setForm] = useState<FormState>(() => initial ? formFromServer(initial) : DEFAULT_FORM);
   const [error, setError] = useState('');
   const selectedTransport = TRANSPORT_OPTIONS.find((item) => item.kind === form.transportKind) ?? TRANSPORT_OPTIONS[0];
@@ -392,7 +411,7 @@ function McpServerForm({
   };
 
   const save = async () => {
-    const result = payloadFromForm(form);
+    const result = payloadFromForm(form, t);
     if ('error' in result) {
       setError(result.error);
       return;
@@ -405,7 +424,7 @@ function McpServerForm({
     <div className="ds-form rounded-lg p-3 space-y-3">
       <div className="flex items-center justify-between gap-2">
         <div className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>
-          {initial ? '编辑 MCP 服务' : '新增 MCP 服务'}
+          {initial ? t('sidepanel.mcpPage.form.editTitle') : t('sidepanel.mcpPage.form.createTitle')}
         </div>
         <label className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--ds-text-secondary)' }}>
           <input
@@ -413,7 +432,7 @@ function McpServerForm({
             checked={form.enabled}
             onChange={(event) => update('enabled', event.target.checked)}
           />
-          启用
+          {t('sidepanel.mcpPage.enabled')}
         </label>
       </div>
 
@@ -423,7 +442,7 @@ function McpServerForm({
         </div>
       )}
 
-      <Field label="名称">
+      <Field label={t('sidepanel.mcpPage.form.name')}>
         <input
           value={form.displayName}
           onChange={(event) => update('displayName', event.target.value)}
@@ -432,7 +451,7 @@ function McpServerForm({
         />
       </Field>
 
-      <Field label="传输">
+      <Field label={t('sidepanel.mcpPage.form.transport')}>
         <select
           value={form.transportKind}
           onChange={(event) => setTransportKind(event.target.value as McpTransportKind)}
@@ -442,11 +461,11 @@ function McpServerForm({
             <option key={item.kind} value={item.kind}>{item.label}</option>
           ))}
         </select>
-        <div className="text-[11px] mt-1" style={{ color: 'var(--ds-text-tertiary)' }}>{selectedTransport.hint}</div>
+        <div className="text-[11px] mt-1" style={{ color: 'var(--ds-text-tertiary)' }}>{t(selectedTransport.hintKey)}</div>
       </Field>
 
       {form.transportKind !== 'native_messaging' && (
-        <Field label={form.transportKind === 'stdio_bridge' ? 'Bridge URL' : '服务 URL'}>
+        <Field label={form.transportKind === 'stdio_bridge' ? 'Bridge URL' : t('sidepanel.mcpPage.form.serviceUrl')}>
           <input
             value={form.url}
             onChange={(event) => update('url', event.target.value)}
@@ -469,7 +488,7 @@ function McpServerForm({
 
       {form.transportKind === 'stdio_bridge' && (
         <div className="space-y-2">
-          <Field label="命令">
+          <Field label={t('sidepanel.mcpPage.form.command')}>
             <input
               value={form.command}
               onChange={(event) => update('command', event.target.value)}
@@ -477,7 +496,7 @@ function McpServerForm({
               placeholder="npx"
             />
           </Field>
-          <Field label="参数">
+          <Field label={t('sidepanel.mcpPage.form.args')}>
             <input
               value={form.args}
               onChange={(event) => update('args', event.target.value)}
@@ -485,7 +504,7 @@ function McpServerForm({
               placeholder="-y @modelcontextprotocol/server-filesystem /tmp"
             />
           </Field>
-          <Field label="工作目录">
+          <Field label={t('sidepanel.mcpPage.form.cwd')}>
             <input
               value={form.cwd}
               onChange={(event) => update('cwd', event.target.value)}
@@ -493,7 +512,7 @@ function McpServerForm({
               placeholder="/Users/me/project"
             />
           </Field>
-          <Field label="环境变量">
+          <Field label={t('sidepanel.mcpPage.form.env')}>
             <textarea
               value={form.env}
               onChange={(event) => update('env', event.target.value)}
@@ -514,26 +533,26 @@ function McpServerForm({
       )}
 
       <div className="grid grid-cols-3 gap-2">
-        <NumberField label="连接 ms" value={form.connectMs} onChange={(value) => update('connectMs', value)} />
-        <NumberField label="请求 ms" value={form.requestMs} onChange={(value) => update('requestMs', value)} />
-        <NumberField label="发现 ms" value={form.discoveryMs} onChange={(value) => update('discoveryMs', value)} />
+        <NumberField label={t('sidepanel.mcpPage.form.connectMs')} value={form.connectMs} onChange={(value) => update('connectMs', value)} />
+        <NumberField label={t('sidepanel.mcpPage.form.requestMs')} value={form.requestMs} onChange={(value) => update('requestMs', value)} />
+        <NumberField label={t('sidepanel.mcpPage.form.discoveryMs')} value={form.discoveryMs} onChange={(value) => update('discoveryMs', value)} />
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <NumberField label="结果字节" value={form.maxResultBytes} onChange={(value) => update('maxResultBytes', value)} />
-        <NumberField label="工具上限" value={form.maxToolCount} onChange={(value) => update('maxToolCount', value)} />
+        <NumberField label={t('sidepanel.mcpPage.form.resultBytes')} value={form.maxResultBytes} onChange={(value) => update('maxResultBytes', value)} />
+        <NumberField label={t('sidepanel.mcpPage.form.toolLimit')} value={form.maxToolCount} onChange={(value) => update('maxToolCount', value)} />
       </div>
 
       <div className="ds-surface-panel rounded-lg p-3 space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium" style={{ color: 'var(--ds-text)' }}>默认执行</span>
+          <span className="text-xs font-medium" style={{ color: 'var(--ds-text)' }}>{t('sidepanel.mcpPage.form.defaultExecution')}</span>
           <label className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--ds-text-secondary)' }}>
             <input
               type="checkbox"
               checked={form.executionEnabled}
               onChange={(event) => update('executionEnabled', event.target.checked)}
             />
-            允许注入
+            {t('sidepanel.mcpPage.form.allowInject')}
           </label>
         </div>
         <select
@@ -541,18 +560,18 @@ function McpServerForm({
           onChange={(event) => update('executionMode', event.target.value as ToolExecutionMode)}
           className="ds-input w-full rounded-lg px-3 py-2 text-sm"
         >
-          <option value="auto">自动执行</option>
-          <option value="manual">手动策略</option>
-          <option value="disabled">禁用</option>
+          <option value="auto">{t('sidepanel.mcpPage.form.modeAuto')}</option>
+          <option value="manual">{t('sidepanel.mcpPage.form.modeManual')}</option>
+          <option value="disabled">{t('sidepanel.mcpPage.form.modeDisabled')}</option>
         </select>
       </div>
 
       <div className="flex justify-end gap-2 pt-1">
         <button onClick={onCancel} className="ds-btn-cancel px-3 py-1.5 text-xs rounded-lg transition-colors">
-          取消
+          {t('common.cancel')}
         </button>
         <button onClick={save} className="ds-btn-primary px-3 py-1.5 text-xs font-medium text-white rounded-lg transition-colors">
-          保存
+          {t('sidepanel.mcpPage.form.save')}
         </button>
       </div>
     </div>
@@ -570,6 +589,7 @@ function HeaderEditor({
   onHeadersChange: (headers: McpHeaderValue[]) => void;
   onSecretsChange: (secrets: McpSecretValue[]) => void;
 }) {
+  const { t } = useI18n();
   const updateHeader = (index: number, patch: Partial<McpHeaderValue>) => {
     onHeadersChange(headers.map((header, itemIndex) => itemIndex === index ? { ...header, ...patch } : header));
   };
@@ -585,7 +605,7 @@ function HeaderEditor({
           onClick={() => onHeadersChange([...headers, { name: '', value: '' }])}
           className="ds-btn-secondary px-2 py-1 text-[11px] rounded-md"
         >
-          添加
+          {t('common.add')}
         </button>
       </div>
       {headers.map((header, index) => (
@@ -594,13 +614,13 @@ function HeaderEditor({
             value={header.name}
             onChange={(event) => updateHeader(index, { name: event.target.value })}
             className="ds-input min-w-0 rounded-lg px-2 py-1.5 text-xs"
-            placeholder="Header"
+            placeholder={t('sidepanel.mcpPage.headers.headerName')}
           />
           <input
             value={header.value}
             onChange={(event) => updateHeader(index, { value: event.target.value })}
             className="ds-input min-w-0 rounded-lg px-2 py-1.5 text-xs"
-            placeholder="Value"
+            placeholder={t('sidepanel.mcpPage.headers.headerValue')}
           />
           <button
             onClick={() => onHeadersChange(headers.filter((_, itemIndex) => itemIndex !== index))}
@@ -617,7 +637,7 @@ function HeaderEditor({
           onClick={() => onSecretsChange([...secrets, { id: crypto.randomUUID(), kind: 'bearer', value: '' }])}
           className="ds-btn-secondary px-2 py-1 text-[11px] rounded-md"
         >
-          添加
+          {t('common.add')}
         </button>
       </div>
       {secrets.map((secret, index) => (
@@ -636,7 +656,7 @@ function HeaderEditor({
               value={secret.value}
               onChange={(event) => updateSecret(index, { value: event.target.value })}
               className="ds-input min-w-0 rounded-lg px-2 py-1.5 text-xs"
-              placeholder="Secret value"
+              placeholder={t('sidepanel.mcpPage.headers.secretValue')}
               type="password"
             />
             <button
@@ -651,7 +671,7 @@ function HeaderEditor({
               value={secret.headerName ?? ''}
               onChange={(event) => updateSecret(index, { headerName: event.target.value })}
               className="ds-input w-full rounded-lg px-2 py-1.5 text-xs"
-              placeholder="Header name"
+              placeholder={t('sidepanel.mcpPage.headers.secretHeaderName')}
             />
           )}
         </div>
@@ -671,6 +691,7 @@ function ServerRow({
   onDelete,
   onRefresh,
   onTest,
+  t,
 }: {
   server: McpServerConfig;
   cache: McpToolCacheEntry | null;
@@ -682,8 +703,9 @@ function ServerRow({
   onDelete: () => void;
   onRefresh: () => void;
   onTest: () => void;
+  t: Translator;
 }) {
-  const status = statusMeta(cache?.health.status ?? server.status);
+  const status = statusMeta(cache?.health.status ?? server.status, t);
   const activeTools = enabledToolCount(server, cache?.descriptors ?? []);
 
   return (
@@ -701,26 +723,29 @@ function ServerRow({
             </span>
           </div>
           <div className="text-[11px] mt-1 truncate" style={{ color: 'var(--ds-text-tertiary)' }}>
-            {transportLabel(server.transport.kind)} · {activeTools}/{cache?.descriptors.length ?? 0} 自动
+            {transportLabel(server.transport.kind)} · {t('sidepanel.mcpPage.row.autoTools', {
+              active: activeTools,
+              total: cache?.descriptors.length ?? 0,
+            })}
           </div>
         </div>
         <label className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--ds-text-secondary)' }} onClick={(event) => event.stopPropagation()}>
           <input type="checkbox" checked={server.enabled} onChange={onToggle} />
-          启用
+          {t('sidepanel.mcpPage.enabled')}
         </label>
       </div>
       <div className="flex items-center gap-1.5 mt-2" onClick={(event) => event.stopPropagation()}>
         <button onClick={onTest} className="ds-btn-secondary px-2 py-1 text-[11px] rounded-md" disabled={busy !== null}>
-          {busy === 'test' ? '测试中' : '测试'}
+          {busy === 'test' ? t('sidepanel.mcpPage.row.testing') : t('common.test')}
         </button>
         <button onClick={onRefresh} className="ds-btn-secondary px-2 py-1 text-[11px] rounded-md" disabled={busy !== null}>
-          {busy === 'refresh' ? '刷新中' : '刷新工具'}
+          {busy === 'refresh' ? t('sidepanel.toolsPage.pythonRefreshing') : t('sidepanel.mcpPage.row.refreshTools')}
         </button>
         <button onClick={onEdit} className="ds-action-btn ds-action-btn-edit px-2 py-1 text-[11px] rounded-md">
-          编辑
+          {t('common.edit')}
         </button>
         <button onClick={onDelete} className="ds-action-btn ds-action-btn-delete px-2 py-1 text-[11px] rounded-md ml-auto">
-          删除
+          {t('common.delete')}
         </button>
       </div>
     </div>
@@ -737,6 +762,8 @@ function ServerDetail({
   onRefresh,
   onTest,
   onToggleTool,
+  t,
+  locale,
 }: {
   server: McpServerConfig;
   cache: McpToolCacheEntry | null;
@@ -747,6 +774,8 @@ function ServerDetail({
   onRefresh: () => void;
   onTest: () => void;
   onToggleTool: (tool: ToolDescriptor) => void;
+  t: Translator;
+  locale: SupportedLocale;
 }) {
   const tools = cache?.descriptors ?? [];
   const serverHistory = history.filter((record) => record.call.provider?.id === server.id).slice(0, 5);
@@ -761,20 +790,20 @@ function ServerDetail({
         <div className="flex gap-1.5">
           {requiresOriginPermission(server) && (
             <button onClick={onRequestPermission} className="ds-btn-secondary px-2 py-1 text-[11px] rounded-md" disabled={busy !== null}>
-              授权
+              {t('sidepanel.mcpPage.detail.grant')}
             </button>
           )}
           <button onClick={onTest} className="ds-btn-secondary px-2 py-1 text-[11px] rounded-md" disabled={busy !== null}>
-            测试
+            {t('common.test')}
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-[11px]">
-        <Metric label="状态" value={statusMeta(cache?.health.status ?? server.status).label} />
-        <Metric label="延迟" value={formatMs(cache?.health.latencyMs ?? null)} />
-        <Metric label="上次连接" value={formatTime(server.lastConnectedAt ?? cache?.health.checkedAt ?? null)} />
-        <Metric label="传输" value={transportLabel(server.transport.kind)} />
+        <Metric label={t('sidepanel.mcpPage.detail.status')} value={statusMeta(cache?.health.status ?? server.status, t).label} />
+        <Metric label={t('sidepanel.mcpPage.detail.latency')} value={formatMs(cache?.health.latencyMs ?? null)} />
+        <Metric label={t('sidepanel.mcpPage.detail.lastConnected')} value={formatTime(server.lastConnectedAt ?? cache?.health.checkedAt ?? null, locale)} />
+        <Metric label={t('sidepanel.mcpPage.detail.transport')} value={transportLabel(server.transport.kind)} />
       </div>
 
       {(cache?.health.error || server.lastError) && (
@@ -784,19 +813,19 @@ function ServerDetail({
       )}
 
       {isShellServer(server) && (
-        <ShellSetupHint server={server} cache={cache} />
+        <ShellSetupHint server={server} cache={cache} t={t} />
       )}
 
       <div className="ds-card rounded-lg p-3 space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium" style={{ color: 'var(--ds-text)' }}>自动执行策略</span>
+          <span className="text-xs font-medium" style={{ color: 'var(--ds-text)' }}>{t('sidepanel.mcpPage.detail.executionPolicy')}</span>
           <label className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--ds-text-secondary)' }}>
             <input
               type="checkbox"
               checked={server.execution.enabled}
               onChange={(event) => onPatch({ execution: { ...server.execution, enabled: event.target.checked } })}
             />
-            允许注入
+            {t('sidepanel.mcpPage.form.allowInject')}
           </label>
         </div>
         <select
@@ -804,40 +833,40 @@ function ServerDetail({
           onChange={(event) => onPatch({ execution: { ...server.execution, mode: event.target.value as ToolExecutionMode } })}
           className="ds-input w-full rounded-lg px-3 py-2 text-sm"
         >
-          <option value="auto">自动执行</option>
-          <option value="manual">手动策略</option>
-          <option value="disabled">禁用</option>
+          <option value="auto">{t('sidepanel.mcpPage.form.modeAuto')}</option>
+          <option value="manual">{t('sidepanel.mcpPage.form.modeManual')}</option>
+          <option value="disabled">{t('sidepanel.mcpPage.form.modeDisabled')}</option>
         </select>
         <div className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>
-          当前注入 {enabledToolCount(server, tools)} 个工具；禁用或手动策略不会进入 DeepSeek Prompt。
+          {t('sidepanel.mcpPage.detail.injectionSummary', { count: enabledToolCount(server, tools) })}
         </div>
       </div>
 
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium" style={{ color: 'var(--ds-text)' }}>发现工具</span>
+          <span className="text-xs font-medium" style={{ color: 'var(--ds-text)' }}>{t('sidepanel.mcpPage.detail.discoveredTools')}</span>
           <button onClick={onRefresh} className="ds-btn-secondary px-2 py-1 text-[11px] rounded-md" disabled={busy !== null}>
-            {busy === 'refresh' ? '刷新中' : '刷新'}
+            {busy === 'refresh' ? t('sidepanel.toolsPage.pythonRefreshing') : t('common.refresh')}
           </button>
         </div>
         {tools.length === 0 ? (
           <div className="text-xs py-6 text-center" style={{ color: 'var(--ds-text-tertiary)' }}>
-            尚未发现工具
+            {t('sidepanel.mcpPage.detail.noTools')}
           </div>
         ) : (
           <div className="space-y-2">
             {tools.map((tool) => (
-              <ToolRow key={tool.id} server={server} tool={tool} onToggle={() => onToggleTool(tool)} />
+              <ToolRow key={tool.id} server={server} tool={tool} onToggle={() => onToggleTool(tool)} t={t} />
             ))}
           </div>
         )}
       </div>
 
       <div className="space-y-2">
-        <div className="text-xs font-medium" style={{ color: 'var(--ds-text)' }}>最近调用</div>
+        <div className="text-xs font-medium" style={{ color: 'var(--ds-text)' }}>{t('sidepanel.mcpPage.detail.recentCalls')}</div>
         {serverHistory.length === 0 ? (
           <div className="text-xs py-3 text-center" style={{ color: 'var(--ds-text-tertiary)' }}>
-            暂无调用记录
+            {t('sidepanel.mcpPage.detail.noHistory')}
           </div>
         ) : (
           <div className="space-y-1.5">
@@ -848,11 +877,11 @@ function ServerDetail({
                     {record.call.name}
                   </span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ color: record.result.ok ? 'var(--ds-success)' : 'var(--ds-danger)', background: record.result.ok ? 'var(--ds-success-bg)' : 'var(--ds-danger-bg)' }}>
-                    {record.result.ok ? '成功' : '失败'}
+                    {record.result.ok ? t('sidepanel.mcpPage.success') : t('sidepanel.mcpPage.failure')}
                   </span>
                 </div>
                 <div className="text-[11px] mt-1 truncate" style={{ color: 'var(--ds-text-tertiary)' }}>
-                  {formatTime(record.createdAt)} · {record.result.summary}
+                  {formatTime(record.createdAt, locale)} · {record.result.summary}
                 </div>
               </div>
             ))}
@@ -863,7 +892,17 @@ function ServerDetail({
   );
 }
 
-function ToolRow({ server, tool, onToggle }: { server: McpServerConfig; tool: ToolDescriptor; onToggle: () => void }) {
+function ToolRow({
+  server,
+  tool,
+  onToggle,
+  t,
+}: {
+  server: McpServerConfig;
+  tool: ToolDescriptor;
+  onToggle: () => void;
+  t: Translator;
+}) {
   const enabled = isToolEnabled(server, tool);
   return (
     <div className="ds-card rounded-lg px-3 py-2">
@@ -874,14 +913,14 @@ function ToolRow({ server, tool, onToggle }: { server: McpServerConfig; tool: To
         </div>
         <label className="flex items-center gap-1 text-[11px]" style={{ color: enabled ? 'var(--ds-success)' : 'var(--ds-text-tertiary)' }}>
           <input type="checkbox" checked={enabled} onChange={onToggle} />
-          {enabled ? '自动' : '禁用'}
+          {enabled ? t('sidepanel.mcpPage.auto') : t('sidepanel.mcpPage.disabled')}
         </label>
       </div>
       <div className="text-[11px] mt-1 leading-4" style={{ color: 'var(--ds-text-secondary)' }}>
         {tool.description}
       </div>
       <div className="text-[10px] mt-2 truncate" style={{ color: 'var(--ds-text-tertiary)' }}>
-        {schemaSummary(tool)}
+        {schemaSummary(tool, t)}
       </div>
     </div>
   );
@@ -954,30 +993,30 @@ function formFromServer(server: McpServerConfig): FormState {
   };
 }
 
-function payloadFromForm(form: FormState): { payload: McpServerCreateInput } | { error: string } {
+function payloadFromForm(form: FormState, t: Translator): { payload: McpServerCreateInput } | { error: string } {
   const displayName = form.displayName.trim();
-  if (!displayName) return { error: '名称不能为空' };
+  if (!displayName) return { error: t('sidepanel.mcpPage.validation.nameRequired') };
 
   const timeouts = {
-    connectMs: positiveInt(form.connectMs, '连接超时'),
-    requestMs: positiveInt(form.requestMs, '请求超时'),
-    discoveryMs: positiveInt(form.discoveryMs, '发现超时'),
+    connectMs: positiveInt(form.connectMs, t('sidepanel.mcpPage.form.connectMs'), t),
+    requestMs: positiveInt(form.requestMs, t('sidepanel.mcpPage.form.requestMs'), t),
+    discoveryMs: positiveInt(form.discoveryMs, t('sidepanel.mcpPage.form.discoveryMs'), t),
   };
   const limits = {
-    maxResultBytes: positiveInt(form.maxResultBytes, '结果字节'),
-    maxToolCount: positiveInt(form.maxToolCount, '工具上限'),
+    maxResultBytes: positiveInt(form.maxResultBytes, t('sidepanel.mcpPage.form.resultBytes'), t),
+    maxToolCount: positiveInt(form.maxToolCount, t('sidepanel.mcpPage.form.toolLimit'), t),
   };
   const invalidNumber = Object.values(timeouts).find((value) => typeof value === 'string') ||
     Object.values(limits).find((value) => typeof value === 'string');
   if (typeof invalidNumber === 'string') return { error: invalidNumber };
 
-  const transportResult = transportFromForm(form);
+  const transportResult = transportFromForm(form, t);
   if ('error' in transportResult) return transportResult;
 
-  const headersResult = normalizeHeaders(form.headers);
+  const headersResult = normalizeHeaders(form.headers, t);
   if ('error' in headersResult) return headersResult;
 
-  const secretsResult = normalizeSecrets(form.secrets);
+  const secretsResult = normalizeSecrets(form.secrets, t);
   if ('error' in secretsResult) return secretsResult;
 
   return {
@@ -1001,31 +1040,31 @@ function payloadFromForm(form: FormState): { payload: McpServerCreateInput } | {
   };
 }
 
-function transportFromForm(form: FormState): { transport: McpServerTransportConfig } | { error: string } {
+function transportFromForm(form: FormState, t: Translator): { transport: McpServerTransportConfig } | { error: string } {
   if (form.transportKind === 'native_messaging') {
     const nativeHost = form.nativeHost.trim();
-    if (!nativeHost) return { error: 'Native Host 不能为空' };
-    if (!/^[A-Za-z0-9_.-]+$/.test(nativeHost)) return { error: 'Native Host 只能包含字母、数字、点、下划线和短横线' };
+    if (!nativeHost) return { error: t('sidepanel.mcpPage.validation.nativeHostRequired') };
+    if (!/^[A-Za-z0-9_.-]+$/.test(nativeHost)) return { error: t('sidepanel.mcpPage.validation.nativeHostInvalid') };
     return { transport: { kind: 'native_messaging', nativeHost } };
   }
 
   const url = form.url.trim();
-  if (!url) return { error: '服务 URL 不能为空' };
+  if (!url) return { error: t('sidepanel.mcpPage.validation.serviceUrlRequired') };
   try {
     const parsed = new URL(url);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return { error: '服务 URL 只支持 http/https' };
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return { error: t('sidepanel.mcpPage.validation.serviceUrlUnsupported') };
   } catch {
-    return { error: '服务 URL 格式无效' };
+    return { error: t('sidepanel.mcpPage.validation.serviceUrlInvalid') };
   }
 
   if (form.transportKind !== 'stdio_bridge') {
     return { transport: { kind: form.transportKind, url } };
   }
 
-  const env = parseEnv(form.env);
+  const env = parseEnv(form.env, t);
   if ('error' in env) return env;
   const command = form.command.trim();
-  if (!command) return { error: 'Stdio Bridge 命令不能为空' };
+  if (!command) return { error: t('sidepanel.mcpPage.validation.stdioCommandRequired') };
   return {
     transport: {
       kind: 'stdio_bridge',
@@ -1038,26 +1077,36 @@ function transportFromForm(form: FormState): { transport: McpServerTransportConf
   };
 }
 
-function normalizeHeaders(headers: McpHeaderValue[]): { headers: McpHeaderValue[] } | { error: string } {
+function normalizeHeaders(headers: McpHeaderValue[], t: Translator): { headers: McpHeaderValue[] } | { error: string } {
   const normalized: McpHeaderValue[] = [];
   for (const header of headers) {
     const name = header.name.trim();
     const value = header.value;
     if (!name && !value) continue;
-    if (!isHeaderName(name)) return { error: `Header 名称无效：${name || '(空)'}` };
-    if (value.includes('\n') || value.includes('\r')) return { error: `Header 值不能包含换行：${name}` };
+    if (!isHeaderName(name)) {
+      return {
+        error: t('sidepanel.mcpPage.validation.headerInvalidName', {
+          name: name || t('sidepanel.mcpPage.validation.emptyValue'),
+        }),
+      };
+    }
+    if (value.includes('\n') || value.includes('\r')) {
+      return { error: t('sidepanel.mcpPage.validation.headerInvalidValue', { name }) };
+    }
     normalized.push({ name, value });
   }
   return { headers: normalized };
 }
 
-function normalizeSecrets(secrets: McpSecretValue[]): { secrets: McpSecretValue[] } | { error: string } {
+function normalizeSecrets(secrets: McpSecretValue[], t: Translator): { secrets: McpSecretValue[] } | { error: string } {
   const normalized: McpSecretValue[] = [];
   for (const secret of secrets) {
     const value = secret.value.trim();
     const headerName = secret.headerName?.trim();
     if (!value && !headerName && !secret.username) continue;
-    if (secret.kind === 'header' && !isHeaderName(headerName ?? '')) return { error: 'Header Secret 需要有效 Header 名称' };
+    if (secret.kind === 'header' && !isHeaderName(headerName ?? '')) {
+      return { error: t('sidepanel.mcpPage.validation.headerSecretRequired') };
+    }
     normalized.push({
       id: secret.id || crypto.randomUUID(),
       kind: secret.kind,
@@ -1069,21 +1118,23 @@ function normalizeSecrets(secrets: McpSecretValue[]): { secrets: McpSecretValue[
   return { secrets: normalized };
 }
 
-function parseEnv(value: string): { env: Record<string, string> } | { error: string } {
+function parseEnv(value: string, t: Translator): { env: Record<string, string> } | { error: string } {
   const env: Record<string, string> = {};
   for (const rawLine of value.split('\n')) {
     const line = rawLine.trim();
     if (!line) continue;
     const index = line.indexOf('=');
-    if (index <= 0) return { error: `环境变量格式无效：${line}` };
+    if (index <= 0) return { error: t('sidepanel.mcpPage.validation.envInvalid', { line }) };
     env[line.slice(0, index)] = line.slice(index + 1);
   }
   return { env };
 }
 
-function positiveInt(value: string, label: string): number | string {
+function positiveInt(value: string, label: string, t: Translator): number | string {
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) return `${label} 必须是正整数`;
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return t('sidepanel.mcpPage.validation.positiveInteger', { label });
+  }
   return parsed;
 }
 
@@ -1116,7 +1167,7 @@ async function requestMcpOriginPermission(server: McpServerConfig): Promise<{
 function getOriginPattern(url: string): string {
   const parsed = new URL(url);
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error('服务 URL 只支持 http/https');
+    throw new Error('Service URL only supports http/https');
   }
   return `${parsed.protocol}//${parsed.host}/*`;
 }
@@ -1163,26 +1214,39 @@ function nextAllowlistForTool(
   return allowlist;
 }
 
-function schemaSummary(tool: ToolDescriptor): string {
+function schemaSummary(tool: ToolDescriptor, t: Translator): string {
   const props = Object.keys(tool.inputSchema.properties ?? {});
   const required = tool.inputSchema.required ?? [];
-  if (props.length === 0) return '参数：无';
-  return `参数：${props.slice(0, 6).join(', ')}${props.length > 6 ? '…' : ''}${required.length ? `；必填 ${required.join(', ')}` : ''}`;
+  if (props.length === 0) return t('sidepanel.mcpPage.detail.schemaNone');
+  return t('sidepanel.mcpPage.detail.schemaSummary', {
+    props: `${props.slice(0, 6).join(', ')}${props.length > 6 ? '...' : ''}`,
+    required: required.length
+      ? t('sidepanel.mcpPage.detail.schemaRequired', { required: required.join(', ') })
+      : '',
+  });
 }
 
-function statusMeta(status: McpServerStatus) {
-  if (status === 'ready') return { label: 'ready', color: 'var(--ds-success)', bg: 'var(--ds-success-bg)' };
-  if (status === 'error') return { label: 'error', color: 'var(--ds-danger)', bg: 'var(--ds-danger-bg)' };
-  if (status === 'disabled') return { label: 'disabled', color: 'var(--ds-text-tertiary)', bg: 'var(--ds-surface)' };
-  return { label: 'unknown', color: 'var(--ds-text-secondary)', bg: 'var(--ds-surface)' };
+function statusMeta(status: McpServerStatus, t: Translator) {
+  if (status === 'ready') return { label: t('sidepanel.mcpPage.status.ready'), color: 'var(--ds-success)', bg: 'var(--ds-success-bg)' };
+  if (status === 'error') return { label: t('sidepanel.mcpPage.status.error'), color: 'var(--ds-danger)', bg: 'var(--ds-danger-bg)' };
+  if (status === 'disabled') return { label: t('sidepanel.mcpPage.status.disabled'), color: 'var(--ds-text-tertiary)', bg: 'var(--ds-surface)' };
+  return { label: t('sidepanel.mcpPage.status.unknown'), color: 'var(--ds-text-secondary)', bg: 'var(--ds-surface)' };
 }
 
 function isShellServer(server: McpServerConfig): boolean {
   return server.displayName === SHELL_MCP_SERVER_NAME || server.transport.nativeHost === SHELL_MCP_NATIVE_HOST;
 }
 
-function ShellSetupHint({ server, cache }: { server: McpServerConfig; cache: McpToolCacheEntry | null }) {
-  const { message, isError } = shellSetupMessage(server, cache);
+function ShellSetupHint({
+  server,
+  cache,
+  t,
+}: {
+  server: McpServerConfig;
+  cache: McpToolCacheEntry | null;
+  t: Translator;
+}) {
+  const { message, isError } = shellSetupMessage(server, cache, t);
   const setup = shellInstallCommand();
   return (
     <div className="ds-card rounded-lg px-3 py-2 text-[11px] leading-4" style={{ color: 'var(--ds-text-secondary)' }}>
@@ -1196,8 +1260,8 @@ function ShellSetupHint({ server, cache }: { server: McpServerConfig; cache: Mcp
       )}
       <div className="mt-1" style={{ color: 'var(--ds-text-tertiary)' }}>
         {setup.mode === 'local'
-          ? '打开终端，在项目根目录执行以下命令：'
-          : '打开终端，执行以下命令（只需一次）：'}
+          ? t('sidepanel.mcpPage.shellSetup.localIntro')
+          : t('sidepanel.mcpPage.shellSetup.publishedIntro')}
       </div>
       <div className="mt-1 font-mono break-all select-all rounded px-2 py-1" style={{ color: 'var(--ds-text)', background: 'var(--ds-surface)' }}>
         {setup.command}
@@ -1205,7 +1269,7 @@ function ShellSetupHint({ server, cache }: { server: McpServerConfig; cache: Mcp
       {setup.fallbackCommand && (
         <>
           <div className="mt-1" style={{ color: 'var(--ds-text-tertiary)' }}>
-            如果你使用的是已发布扩展而不是本地源码版，执行：
+            {t('sidepanel.mcpPage.shellSetup.fallbackIntro')}
           </div>
           <div className="mt-1 font-mono break-all select-all rounded px-2 py-1" style={{ color: 'var(--ds-text)', background: 'var(--ds-surface)' }}>
             {setup.fallbackCommand}
@@ -1214,16 +1278,16 @@ function ShellSetupHint({ server, cache }: { server: McpServerConfig; cache: Mcp
       )}
       <div className="mt-1" style={{ color: 'var(--ds-text-tertiary)' }}>
         {setup.usesExtensionId
-          ? `已自动检测 ${browserLabel(setup.browser)} 扩展 ID。安装需要本机已安装 Node.js/npm。`
-          : 'Firefox 使用固定扩展 ID，不需要额外填写 extension id。安装需要本机已安装 Node.js/npm。'}
+          ? t('sidepanel.mcpPage.shellSetup.detectedExtensionId', { browser: browserLabel(setup.browser) })
+          : t('sidepanel.mcpPage.shellSetup.firefoxFixedId')}
       </div>
       <div className="mt-1" style={{ color: 'var(--ds-text-tertiary)' }}>
-        命令会安装或更新 Shell Native Host；默认跳过 OfficeCLI，如需 OfficeCLI 可去掉 --skip-officecli。
+        {t('sidepanel.mcpPage.shellSetup.installNote')}
       </div>
       <div className="mt-1" style={{ color: 'var(--ds-text-tertiary)' }}>
         {!server.enabled
-          ? '安装完成后，打开上方开关启用此服务，再点击「测试」验证连接。'
-          : '安装完成后重启浏览器，回到这里点击「测试」验证连接。'}
+          ? t('sidepanel.mcpPage.shellSetup.enableAndTest')
+          : t('sidepanel.mcpPage.shellSetup.restartAndTest')}
       </div>
     </div>
   );
@@ -1240,7 +1304,7 @@ function shellInstallCommand(): {
 } {
   const browser = currentNativeHostBrowser();
   const usesExtensionId = browser !== 'firefox';
-  const extensionArg = usesExtensionId ? ` --extension-id ${chrome.runtime.id || '<扩展ID>'}` : '';
+  const extensionArg = usesExtensionId ? ` --extension-id ${chrome.runtime.id || '<extension-id>'}` : '';
   const installArgs = `install --browser ${browser}${extensionArg} --skip-officecli`;
   const localCommand = `npm run shell:install -- ${installArgs}`;
   const publishedCommand = `npx deepseek-pp-shell-host ${installArgs}`;
@@ -1271,16 +1335,20 @@ function browserLabel(browser: NativeHostBrowser): string {
   return 'Chrome';
 }
 
-function shellSetupMessage(server: McpServerConfig, cache: McpToolCacheEntry | null): { message: string; isError: boolean } {
+function shellSetupMessage(
+  server: McpServerConfig,
+  cache: McpToolCacheEntry | null,
+  t: Translator,
+): { message: string; isError: boolean } {
   const error = `${cache?.health.error ?? ''} ${server.lastError ?? ''}`.toLowerCase();
   if (error.includes('forbidden')) {
-    return { message: 'Native Host 已安装，但未授权当前扩展 ID。请重新运行下方安装命令后重启浏览器。', isError: true };
+    return { message: t('sidepanel.mcpPage.shellSetup.forbidden'), isError: true };
   }
   if (error.includes('native_host_unavailable') || error.includes('native messaging host not found') || error.includes('not found') || error.includes('specified native messaging host')) {
-    return { message: '未找到 Native Host — 请先运行下方安装命令，并确保已安装 Node.js/npm。', isError: true };
+    return { message: t('sidepanel.mcpPage.shellSetup.notFound'), isError: true };
   }
   if (error.includes('native_messaging_unavailable')) {
-    return { message: '当前浏览器不支持 Native Messaging，请使用 Chrome、Edge 或 Firefox。', isError: true };
+    return { message: t('sidepanel.mcpPage.shellSetup.unavailable'), isError: true };
   }
   if (
     error.includes('failed to fetch') ||
@@ -1288,15 +1356,15 @@ function shellSetupMessage(server: McpServerConfig, cache: McpToolCacheEntry | n
     error.includes('cannot reach') ||
     error.includes('connection refused')
   ) {
-    return { message: '无法连接到 Native Host — 请确认已运行安装脚本并重启浏览器。', isError: true };
+    return { message: t('sidepanel.mcpPage.shellSetup.cannotConnect'), isError: true };
   }
   if (cache?.health.status === 'ready') {
-    return { message: `已连接，发现 ${cache.health.toolCount} 个工具。`, isError: false };
+    return { message: t('sidepanel.mcpPage.shellSetup.ready', { count: cache.health.toolCount }), isError: false };
   }
   if (!server.enabled) {
-    return { message: '服务已创建但尚未启用。请先安装 Native Host，再启用并测试。', isError: false };
+    return { message: t('sidepanel.mcpPage.shellSetup.disabled'), isError: false };
   }
-  return { message: '请先安装 Native Host，再点击「测试」验证连接。', isError: false };
+  return { message: t('sidepanel.mcpPage.shellSetup.installFirst'), isError: false };
 }
 
 function transportLabel(kind: McpTransportKind): string {
@@ -1313,7 +1381,7 @@ function formatMs(value: number | null | undefined): string {
   return typeof value === 'number' ? `${value} ms` : '-';
 }
 
-function formatTime(value: number | null | undefined): string {
+function formatTime(value: number | null | undefined, locale?: SupportedLocale): string {
   if (!value) return '-';
-  return new Date(value).toLocaleString();
+  return new Date(value).toLocaleString(locale);
 }

@@ -8,6 +8,8 @@ import type {
   AutomationScheduleKind,
 } from '../../../core/automation/types';
 import { validateAutomationSchedule } from '../../../core/automation/schedule';
+import type { SupportedLocale } from '../../../core/i18n';
+import { useI18n } from '../i18n';
 
 const DEFAULT_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai';
 
@@ -41,6 +43,7 @@ const EMPTY_FORM: FormState = {
 };
 
 export default function AutomationPage() {
+  const { t } = useI18n();
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [runs, setRuns] = useState<Record<string, AutomationRun[]>>({});
   const [showForm, setShowForm] = useState(false);
@@ -113,11 +116,11 @@ export default function AutomationPage() {
   const save = async () => {
     const payload = toAutomationInput(form);
     if (!payload.name || !payload.prompt) {
-      setMessage('名称和 Prompt 不能为空');
+      setMessage(t('sidepanel.automationPage.namePromptRequired'));
       return;
     }
     if (payload.schedule.enabled && !payload.schedule.expression) {
-      setMessage('请填写定时表达式');
+      setMessage(t('sidepanel.automationPage.expressionRequired'));
       return;
     }
     const scheduleValidation = validateAutomationSchedule(payload.schedule);
@@ -160,7 +163,7 @@ export default function AutomationPage() {
       if (run && 'error' in run && typeof run.error === 'string') {
         setMessage(run.error);
       } else if (run && 'status' in run && (run.status === 'failed' || run.status === 'timeout')) {
-        setMessage(run.error?.message ?? '运行失败');
+        setMessage(run.error?.message ?? t('sidepanel.automationPage.runFailed'));
       }
     } finally {
       setRunningIds((prev) => {
@@ -181,7 +184,7 @@ export default function AutomationPage() {
   };
 
   const remove = async (automation: Automation) => {
-    if (!confirm(`删除自动化「${automation.name}」？`)) return;
+    if (!confirm(t('sidepanel.automationPage.deleteConfirm', { name: automation.name }))) return;
     await chrome.runtime.sendMessage({ type: 'DELETE_AUTOMATION', payload: { id: automation.id } });
     await load();
   };
@@ -196,10 +199,10 @@ export default function AutomationPage() {
       <div className="flex items-center justify-between gap-2">
         <div>
           <h2 className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>
-            自动化
+            {t('sidepanel.automationPage.title')}
           </h2>
           <div className="text-[11px] mt-0.5" style={{ color: 'var(--ds-text-tertiary)' }}>
-            {automations.length} 个任务，{activeCount} 个启用
+            {t('sidepanel.automationPage.summary', { total: automations.length, active: activeCount })}
           </div>
         </div>
         <button
@@ -209,7 +212,7 @@ export default function AutomationPage() {
           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
-          新建
+          {t('sidepanel.automationPage.create')}
         </button>
       </div>
 
@@ -238,7 +241,7 @@ export default function AutomationPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <p className="text-sm" style={{ color: 'var(--ds-text-tertiary)' }}>暂无自动化</p>
+          <p className="text-sm" style={{ color: 'var(--ds-text-tertiary)' }}>{t('sidepanel.automationPage.empty')}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -274,6 +277,7 @@ function AutomationForm({
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useI18n();
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     onChange({ ...form, [key]: value });
   };
@@ -283,22 +287,22 @@ function AutomationForm({
     <div className="ds-form rounded-xl p-4 space-y-3">
       <div className="grid grid-cols-2 gap-2">
         <label className="space-y-1">
-          <span className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>名称</span>
+          <span className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>{t('sidepanel.automationPage.form.name')}</span>
           <input
             value={form.name}
             onChange={(e) => update('name', e.target.value)}
             className="ds-input w-full px-3 py-2 text-xs rounded-lg"
-            placeholder="任务名称"
+            placeholder={t('sidepanel.automationPage.form.namePlaceholder')}
           />
         </label>
         <label className="space-y-1">
-          <span className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>模型</span>
+          <span className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>{t('sidepanel.automationPage.form.model')}</span>
           <select
             value={form.modelType}
             onChange={(e) => update('modelType', e.target.value)}
             className="ds-input w-full px-3 py-2 text-xs rounded-lg"
           >
-            <option value="">默认</option>
+            <option value="">{t('sidepanel.automationPage.form.defaultModel')}</option>
             <option value="expert">Expert</option>
             <option value="vision">Vision</option>
           </select>
@@ -311,25 +315,25 @@ function AutomationForm({
           value={form.prompt}
           onChange={(e) => update('prompt', e.target.value)}
           className="ds-input w-full px-3 py-2 text-xs rounded-lg min-h-28 resize-y"
-          placeholder="输入要定时发送到 DeepSeek 的内容"
+          placeholder={t('sidepanel.automationPage.form.promptPlaceholder')}
         />
       </label>
 
       <div className="grid grid-cols-3 gap-2">
         <label className="space-y-1">
-          <span className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>触发</span>
+          <span className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>{t('sidepanel.automationPage.form.trigger')}</span>
           <select
             value={form.scheduleKind}
             onChange={(e) => update('scheduleKind', e.target.value as AutomationScheduleKind)}
             className="ds-input w-full px-3 py-2 text-xs rounded-lg"
           >
-            <option value="manual">手动</option>
+            <option value="manual">{t('sidepanel.automationPage.form.manual')}</option>
             <option value="cron">Cron</option>
             <option value="rrule">RRULE</option>
           </select>
         </label>
         <label className="space-y-1 col-span-2">
-          <span className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>表达式</span>
+          <span className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>{t('sidepanel.automationPage.form.expression')}</span>
           <input
             value={isScheduled ? form.expression : ''}
             onChange={(e) => update('expression', e.target.value)}
@@ -341,7 +345,7 @@ function AutomationForm({
       </div>
 
       <label className="space-y-1 block">
-        <span className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>时区</span>
+        <span className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>{t('sidepanel.automationPage.form.timezone')}</span>
         <input
           value={form.timezone}
           onChange={(e) => update('timezone', e.target.value)}
@@ -357,7 +361,7 @@ function AutomationForm({
             checked={form.searchEnabled}
             onChange={(e) => update('searchEnabled', e.target.checked)}
           />
-          联网
+          {t('sidepanel.automationPage.form.search')}
         </label>
         <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--ds-text-secondary)' }}>
           <input
@@ -365,16 +369,16 @@ function AutomationForm({
             checked={form.thinkingEnabled}
             onChange={(e) => update('thinkingEnabled', e.target.checked)}
           />
-          深度思考
+          {t('sidepanel.automationPage.form.thinking')}
         </label>
       </div>
 
       <div className="flex justify-end gap-2 pt-1">
         <button onClick={onCancel} className="ds-btn-cancel px-3 py-1.5 text-xs rounded-lg">
-          取消
+          {t('common.cancel')}
         </button>
         <button onClick={onSave} className="ds-btn-primary px-3 py-1.5 text-xs font-medium text-white rounded-lg">
-          {editing ? '保存' : '创建'}
+          {editing ? t('common.save') : t('sidepanel.automationPage.form.create')}
         </button>
       </div>
     </div>
@@ -400,6 +404,7 @@ function AutomationCard({
   onDelete: () => void;
   onOpenSession: () => void;
 }) {
+  const { t, locale } = useI18n();
   const latestRun = runs[0];
   const statusColor = automation.status === 'active' ? 'var(--ds-success)' : 'var(--ds-text-tertiary)';
   const statusBg = automation.status === 'active' ? 'var(--ds-success-bg)' : 'var(--ds-surface)';
@@ -413,7 +418,7 @@ function AutomationCard({
               {automation.name}
             </h3>
             <span className="text-[10px] px-1.5 py-0.5 rounded-full shrink-0" style={{ color: statusColor, background: statusBg }}>
-              {automation.status === 'active' ? '启用' : '暂停'}
+              {automation.status === 'active' ? t('sidepanel.automationPage.status.active') : t('sidepanel.automationPage.status.paused')}
             </span>
           </div>
           <p className="text-[11px] mt-1 line-clamp-2" style={{ color: 'var(--ds-text-secondary)' }}>
@@ -421,17 +426,17 @@ function AutomationCard({
           </p>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <IconButton title={automation.status === 'active' ? '暂停' : '启用'} path={automation.status === 'active' ? 'M10 9v6m4-6v6' : 'M5 3l14 9-14 9V3z'} onClick={onToggleStatus} />
-          <IconButton title="编辑" path="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7 M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" onClick={onEdit} />
-          <IconButton title="删除" path="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m-9 0h12" onClick={onDelete} danger />
+          <IconButton title={automation.status === 'active' ? t('sidepanel.automationPage.status.paused') : t('sidepanel.automationPage.status.active')} path={automation.status === 'active' ? 'M10 9v6m4-6v6' : 'M5 3l14 9-14 9V3z'} onClick={onToggleStatus} />
+          <IconButton title={t('common.edit')} path="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7 M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" onClick={onEdit} />
+          <IconButton title={t('common.delete')} path="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m-9 0h12" onClick={onDelete} danger />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-[11px]">
-        <Meta label="下次" value={formatTime(automation.nextRunAt)} />
-        <Meta label="上次" value={formatTime(automation.lastRunAt)} />
-        <Meta label="会话" value={automation.deepseek.chatSessionId ? shortId(automation.deepseek.chatSessionId) : '未创建'} />
-        <Meta label="最近" value={latestRun ? formatRun(latestRun) : '暂无'} />
+        <Meta label={t('sidepanel.automationPage.meta.next')} value={formatTime(automation.nextRunAt, locale, t('sidepanel.automationPage.meta.none'))} />
+        <Meta label={t('sidepanel.automationPage.meta.previous')} value={formatTime(automation.lastRunAt, locale, t('sidepanel.automationPage.meta.none'))} />
+        <Meta label={t('sidepanel.automationPage.meta.session')} value={automation.deepseek.chatSessionId ? shortId(automation.deepseek.chatSessionId) : t('sidepanel.automationPage.meta.notCreated')} />
+        <Meta label={t('sidepanel.automationPage.meta.recent')} value={latestRun ? formatRun(latestRun, t) : t('sidepanel.automationPage.meta.none')} />
       </div>
 
       {automation.lastError && (
@@ -446,14 +451,14 @@ function AutomationCard({
           disabled={!automation.deepseek.sessionUrl}
           className="ds-btn-secondary px-3 py-1.5 text-xs rounded-lg disabled:opacity-50"
         >
-          打开会话
+          {t('sidepanel.automationPage.actions.openSession')}
         </button>
         <button
           onClick={onRun}
           disabled={running}
           className="ds-btn-primary px-3 py-1.5 text-xs font-medium text-white rounded-lg disabled:opacity-60"
         >
-          {running ? '运行中' : '立即运行'}
+          {running ? t('sidepanel.automationPage.status.running') : t('sidepanel.automationPage.actions.runNow')}
         </button>
       </div>
     </div>
@@ -532,9 +537,9 @@ function buildSchedule(form: FormState): AutomationSchedule {
   };
 }
 
-function formatTime(value: number | null): string {
-  if (!value) return '暂无';
-  return new Date(value).toLocaleString('zh-CN', {
+function formatTime(value: number | null, locale: SupportedLocale, emptyText: string): string {
+  if (!value) return emptyText;
+  return new Date(value).toLocaleString(locale, {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -542,17 +547,17 @@ function formatTime(value: number | null): string {
   });
 }
 
-function formatRun(run: AutomationRun): string {
+function formatRun(run: AutomationRun, t: ReturnType<typeof useI18n>['t']): string {
   const label: Record<AutomationRun['status'], string> = {
-    queued: '排队中',
-    running: '运行中',
-    succeeded: '成功',
-    failed: '失败',
-    timeout: '超时',
-    cancelled: '已取消',
-    skipped: '已跳过',
+    queued: t('sidepanel.automationPage.status.queued'),
+    running: t('sidepanel.automationPage.status.running'),
+    succeeded: t('sidepanel.automationPage.status.succeeded'),
+    failed: t('sidepanel.automationPage.status.failed'),
+    timeout: t('sidepanel.automationPage.status.timeout'),
+    cancelled: t('sidepanel.automationPage.status.cancelled'),
+    skipped: t('sidepanel.automationPage.status.skipped'),
   };
-  return `${label[run.status]}${run.attempt > 1 ? ` · ${run.attempt}次` : ''}`;
+  return `${label[run.status]}${run.attempt > 1 ? ` · ${t('sidepanel.automationPage.attempt', { count: run.attempt })}` : ''}`;
 }
 
 function shortId(id: string): string {

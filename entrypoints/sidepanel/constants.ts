@@ -1,16 +1,17 @@
 import type { MemoryType } from '../../core/types';
+import type { LocaleMessageKey } from '../../core/i18n';
 
 export const MEMORY_TYPE_CONFIG: {
   key: MemoryType;
-  label: string;
+  labelKey: LocaleMessageKey;
   color: string;
   bg: string;
   border: string;
 }[] = [
-  { key: 'user', label: '用户', color: 'var(--ds-type-user)', bg: 'var(--ds-type-user-bg)', border: 'var(--ds-type-user-border)' },
-  { key: 'feedback', label: '反馈', color: 'var(--ds-type-feedback)', bg: 'var(--ds-type-feedback-bg)', border: 'var(--ds-type-feedback-border)' },
-  { key: 'topic', label: '话题', color: 'var(--ds-type-topic)', bg: 'var(--ds-type-topic-bg)', border: 'var(--ds-type-topic-border)' },
-  { key: 'reference', label: '参考', color: 'var(--ds-type-reference)', bg: 'var(--ds-type-reference-bg)', border: 'var(--ds-type-reference-border)' },
+  { key: 'user', labelKey: 'sidepanel.memory.types.user', color: 'var(--ds-type-user)', bg: 'var(--ds-type-user-bg)', border: 'var(--ds-type-user-border)' },
+  { key: 'feedback', labelKey: 'sidepanel.memory.types.feedback', color: 'var(--ds-type-feedback)', bg: 'var(--ds-type-feedback-bg)', border: 'var(--ds-type-feedback-border)' },
+  { key: 'topic', labelKey: 'sidepanel.memory.types.topic', color: 'var(--ds-type-topic)', bg: 'var(--ds-type-topic-bg)', border: 'var(--ds-type-topic-border)' },
+  { key: 'reference', labelKey: 'sidepanel.memory.types.reference', color: 'var(--ds-type-reference)', bg: 'var(--ds-type-reference-bg)', border: 'var(--ds-type-reference-border)' },
 ];
 
 export const MEMORY_TYPE_MAP = Object.fromEntries(

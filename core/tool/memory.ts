@@ -1,4 +1,5 @@
 import type { Memory, MemoryType, NewMemory } from '../types';
+import { DEFAULT_LOCALE, translate, type SupportedLocale } from '../i18n';
 import type {
   JsonValue,
   ToolCall,
@@ -13,7 +14,7 @@ const MEMORY_TYPES: MemoryType[] = ['user', 'feedback', 'topic', 'reference'];
 export const MEMORY_TOOL_PROVIDER: ToolProviderIdentity = {
   kind: 'local',
   id: 'memory',
-  displayName: 'DeepSeek++ Memory',
+  displayName: translate(DEFAULT_LOCALE, 'tool.memory.providerName'),
   transport: 'in_process',
 };
 
@@ -32,28 +33,40 @@ export interface MemoryToolRuntime {
   deleteMemory(id: number): Promise<void>;
 }
 
-export const MEMORY_TOOL_DESCRIPTORS: ToolDescriptor[] = [
-  {
+export function createMemoryToolProviderIdentity(
+  locale: SupportedLocale = DEFAULT_LOCALE,
+): ToolProviderIdentity {
+  return {
+    ...MEMORY_TOOL_PROVIDER,
+    displayName: translate(locale, 'tool.memory.providerName'),
+  };
+}
+
+export function createMemoryToolDescriptors(
+  locale: SupportedLocale = DEFAULT_LOCALE,
+): ToolDescriptor[] {
+  const provider = createMemoryToolProviderIdentity(locale);
+  return [{
     id: 'local:memory:memory_save',
-    provider: MEMORY_TOOL_PROVIDER,
+    provider,
     name: 'memory_save',
     invocationName: 'memory_save',
-    title: '保存记忆',
-    description: '保存一条新的长期记忆',
+    title: translate(locale, 'tool.memory.saveTitle'),
+    description: translate(locale, 'tool.memory.saveDescription'),
     inputSchema: {
       type: 'object',
       properties: {
         type: {
           type: 'string',
           enum: MEMORY_TYPES,
-          description: '记忆类型：user=身份角色偏好, feedback=行为纠正, topic=讨论要点, reference=外部资源链接',
+          description: translate(locale, 'tool.memory.typeDescription'),
         },
-        name: { type: 'string', description: '简短标题' },
-        content: { type: 'string', description: '要保存的内容' },
+        name: { type: 'string', description: translate(locale, 'tool.memory.nameDescription') },
+        content: { type: 'string', description: translate(locale, 'tool.memory.contentDescription') },
         tags: {
           type: 'array',
           items: { type: 'string' },
-          description: '标签列表',
+          description: translate(locale, 'tool.memory.tagsDescription'),
         },
       },
       required: ['type', 'name', 'content', 'tags'],
@@ -67,22 +80,22 @@ export const MEMORY_TOOL_DESCRIPTORS: ToolDescriptor[] = [
   },
   {
     id: 'local:memory:memory_update',
-    provider: MEMORY_TOOL_PROVIDER,
+    provider,
     name: 'memory_update',
     invocationName: 'memory_update',
-    title: '更新记忆',
-    description: '更新已有记忆',
+    title: translate(locale, 'tool.memory.updateTitle'),
+    description: translate(locale, 'tool.memory.updateDescription'),
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'integer', description: '记忆ID' },
-        type: { type: 'string', enum: MEMORY_TYPES, description: '记忆类型' },
-        name: { type: 'string', description: '更新后的标题' },
-        content: { type: 'string', description: '更新后的内容' },
+        id: { type: 'integer', description: translate(locale, 'tool.memory.idDescription') },
+        type: { type: 'string', enum: MEMORY_TYPES, description: translate(locale, 'tool.memory.typeDescription') },
+        name: { type: 'string', description: translate(locale, 'tool.memory.updatedNameDescription') },
+        content: { type: 'string', description: translate(locale, 'tool.memory.updatedContentDescription') },
         tags: {
           type: 'array',
           items: { type: 'string' },
-          description: '标签列表',
+          description: translate(locale, 'tool.memory.tagsDescription'),
         },
       },
       required: ['id', 'type', 'name', 'content', 'tags'],
@@ -96,15 +109,15 @@ export const MEMORY_TOOL_DESCRIPTORS: ToolDescriptor[] = [
   },
   {
     id: 'local:memory:memory_delete',
-    provider: MEMORY_TOOL_PROVIDER,
+    provider,
     name: 'memory_delete',
     invocationName: 'memory_delete',
-    title: '删除记忆',
-    description: '删除记忆',
+    title: translate(locale, 'tool.memory.deleteTitle'),
+    description: translate(locale, 'tool.memory.deleteDescription'),
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'integer', description: '记忆ID' },
+        id: { type: 'integer', description: translate(locale, 'tool.memory.idDescription') },
       },
       required: ['id'],
       additionalProperties: false,
@@ -115,20 +128,26 @@ export const MEMORY_TOOL_DESCRIPTORS: ToolDescriptor[] = [
       risk: 'medium',
     },
   },
-];
+  ];
+}
+
+export const MEMORY_TOOL_DESCRIPTORS: ToolDescriptor[] = createMemoryToolDescriptors(DEFAULT_LOCALE);
 
 export function isMemoryToolName(name: string): name is MemoryToolName {
   return (MEMORY_TOOL_NAMES as readonly string[]).includes(name);
 }
 
-export function createMemoryToolProvider(runtime: MemoryToolRuntime): ToolProvider {
+export function createMemoryToolProvider(
+  runtime: MemoryToolRuntime,
+  locale: SupportedLocale = DEFAULT_LOCALE,
+): ToolProvider {
   return {
-    identity: MEMORY_TOOL_PROVIDER,
+    identity: createMemoryToolProviderIdentity(locale),
     async listTools() {
-      return MEMORY_TOOL_DESCRIPTORS;
+      return createMemoryToolDescriptors(locale);
     },
     execute(call) {
-      return executeMemoryToolCall(runtime, call);
+      return executeMemoryToolCall(runtime, call, locale);
     },
   };
 }
@@ -136,23 +155,24 @@ export function createMemoryToolProvider(runtime: MemoryToolRuntime): ToolProvid
 export async function executeMemoryToolCall(
   runtime: MemoryToolRuntime,
   call: ToolCall,
+  locale: SupportedLocale = DEFAULT_LOCALE,
 ): Promise<ToolResult> {
   if (call.name === 'memory_save') {
-    return saveMemory(runtime, call);
+    return saveMemory(runtime, call, locale);
   }
 
   if (call.name === 'memory_update') {
-    return updateExistingMemory(runtime, call);
+    return updateExistingMemory(runtime, call, locale);
   }
 
   if (call.name === 'memory_delete') {
-    return deleteExistingMemory(runtime, call);
+    return deleteExistingMemory(runtime, call, locale);
   }
 
   return {
     ok: false,
     name: call.name,
-    summary: '不支持的记忆工具',
+    summary: translate(locale, 'tool.memory.unsupported'),
     error: {
       code: 'memory_tool_unsupported',
       message: `Unsupported memory tool: ${call.name}`,
@@ -161,8 +181,12 @@ export async function executeMemoryToolCall(
   };
 }
 
-async function saveMemory(runtime: MemoryToolRuntime, call: ToolCall): Promise<ToolResult> {
-  const parsed = parseMemorySavePayload(call);
+async function saveMemory(
+  runtime: MemoryToolRuntime,
+  call: ToolCall,
+  locale: SupportedLocale,
+): Promise<ToolResult> {
+  const parsed = parseMemorySavePayload(call, locale);
   if (!parsed.ok) return parsed.result;
 
   const saved = await runtime.saveMemory({
@@ -175,21 +199,34 @@ async function saveMemory(runtime: MemoryToolRuntime, call: ToolCall): Promise<T
   });
 
   if (!saved?.id) {
-    return failure(call, 'memory_save_failed', '保存失败', '未收到保存确认', true);
+    return failure(
+      call,
+      'memory_save_failed',
+      translate(locale, 'tool.memory.saveFailed'),
+      translate(locale, 'tool.memory.saveMissingConfirmation'),
+      true,
+    );
   }
 
-  return success(call, '已保存', parsed.memory.name, { id: saved.id });
+  return success(call, locale, translate(locale, 'tool.memory.saved'), parsed.memory.name, { id: saved.id });
 }
 
 function parseMemorySavePayload(
   call: ToolCall,
+  locale: SupportedLocale,
 ): { ok: true; memory: Pick<NewMemory, 'type' | 'name' | 'content' | 'tags'> } | { ok: false; result: ToolResult } {
   const payload = call.payload;
   const type = memoryTypeValue(payload.type);
   if (!type) {
     return {
       ok: false,
-      result: failure(call, 'memory_invalid_payload', '记忆格式错误', 'type 必须是 user、feedback、topic 或 reference', false),
+      result: failure(
+        call,
+        'memory_invalid_payload',
+        translate(locale, 'tool.memory.invalidPayload'),
+        translate(locale, 'tool.memory.invalidType'),
+        false,
+      ),
     };
   }
 
@@ -197,7 +234,13 @@ function parseMemorySavePayload(
   if (!name) {
     return {
       ok: false,
-      result: failure(call, 'memory_invalid_payload', '记忆格式错误', 'name 必须是非空字符串', false),
+      result: failure(
+        call,
+        'memory_invalid_payload',
+        translate(locale, 'tool.memory.invalidPayload'),
+        translate(locale, 'tool.memory.invalidName'),
+        false,
+      ),
     };
   }
 
@@ -205,14 +248,26 @@ function parseMemorySavePayload(
   if (!content) {
     return {
       ok: false,
-      result: failure(call, 'memory_invalid_payload', '记忆格式错误', 'content 必须是非空字符串', false),
+      result: failure(
+        call,
+        'memory_invalid_payload',
+        translate(locale, 'tool.memory.invalidPayload'),
+        translate(locale, 'tool.memory.invalidContent'),
+        false,
+      ),
     };
   }
 
   if (!Array.isArray(payload.tags) || !payload.tags.every((item) => typeof item === 'string')) {
     return {
       ok: false,
-      result: failure(call, 'memory_invalid_payload', '记忆格式错误', 'tags 必须是字符串数组', false),
+      result: failure(
+        call,
+        'memory_invalid_payload',
+        translate(locale, 'tool.memory.invalidPayload'),
+        translate(locale, 'tool.memory.invalidTags'),
+        false,
+      ),
     };
   }
 
@@ -227,13 +282,25 @@ function parseMemorySavePayload(
   };
 }
 
-async function updateExistingMemory(runtime: MemoryToolRuntime, call: ToolCall): Promise<ToolResult> {
+async function updateExistingMemory(
+  runtime: MemoryToolRuntime,
+  call: ToolCall,
+  locale: SupportedLocale,
+): Promise<ToolResult> {
   const payload = call.payload;
   const id = numberValue(payload.id);
-  if (!id) return failure(call, 'memory_invalid_id', '无效 ID', undefined, false);
+  if (!id) return failure(call, 'memory_invalid_id', translate(locale, 'tool.memory.invalidId'), undefined, false);
 
   const existing = await runtime.getMemoryById(id);
-  if (!existing) return failure(call, 'memory_not_found', '未找到记忆', `ID ${id} 不存在`, false);
+  if (!existing) {
+    return failure(
+      call,
+      'memory_not_found',
+      translate(locale, 'tool.memory.notFound'),
+      translate(locale, 'tool.memory.notFoundDetail', { id }),
+      false,
+    );
+  }
 
   const name = stringValue(payload.name) || existing.name;
   await runtime.updateMemory({
@@ -245,24 +312,34 @@ async function updateExistingMemory(runtime: MemoryToolRuntime, call: ToolCall):
     tags: Array.isArray(payload.tags) ? stringArrayValue(payload.tags) : existing.tags,
   });
 
-  return success(call, '已更新', name);
+  return success(call, locale, translate(locale, 'tool.memory.updated'), name);
 }
 
-async function deleteExistingMemory(runtime: MemoryToolRuntime, call: ToolCall): Promise<ToolResult> {
+async function deleteExistingMemory(
+  runtime: MemoryToolRuntime,
+  call: ToolCall,
+  locale: SupportedLocale,
+): Promise<ToolResult> {
   const id = numberValue(call.payload.id);
-  if (!id) return failure(call, 'memory_invalid_id', '无效 ID', undefined, false);
+  if (!id) return failure(call, 'memory_invalid_id', translate(locale, 'tool.memory.invalidId'), undefined, false);
 
   await runtime.deleteMemory(id);
-  return success(call, '已删除', `#${id}`);
+  return success(call, locale, translate(locale, 'tool.memory.deleted'), `#${id}`);
 }
 
-function success(call: ToolCall, summary: string, detail?: string, output?: JsonValue): ToolResult {
+function success(
+  call: ToolCall,
+  locale: SupportedLocale,
+  summary: string,
+  detail?: string,
+  output?: JsonValue,
+): ToolResult {
   return {
     ok: true,
     name: call.name,
     callId: call.id,
     descriptorId: call.descriptorId,
-    provider: call.provider ?? MEMORY_TOOL_PROVIDER,
+    provider: call.provider ?? createMemoryToolProviderIdentity(locale),
     summary,
     detail,
     output,

@@ -5,7 +5,7 @@
 <h1 align="center">DeepSeek++</h1>
 
 <p align="center">
-  <strong>DeepSeek browser extension for an AI agent workspace with MCP tools, memory, Skills, automation, web search, and conversation export.</strong>
+  <strong>DeepSeek browser extension for a bilingual AI agent workspace with MCP tools, memory, Skills, automation, web search, and conversation export.</strong>
 </p>
 
 <p align="center">
@@ -34,9 +34,11 @@
 
 ## Product Positioning
 
-DeepSeek++ is an open-source browser extension for [DeepSeek Web](https://chat.deepseek.com), with support for Chrome, Edge, and Firefox. It turns DeepSeek Web into an AI agent workspace where users can run MCP tools, long-term memory, Skills, system prompt presets, web search, web fetch, conversation export, and scheduled automation in the same browser workflow.
+DeepSeek++ is an open-source browser extension for [DeepSeek Web](https://chat.deepseek.com), with support for Chrome, Edge, and Firefox. It turns DeepSeek Web into an AI agent workspace where users can run English or Simplified Chinese UI, MCP tools, long-term memory, Skills, system prompt presets, web search, web fetch, conversation export, and scheduled automation in the same browser workflow.
 
 In plain terms, it is a DeepSeek Chrome extension, DeepSeek MCP tools extension, DeepSeek memory plugin, DeepSeek conversation export tool, and AI agent browser extension for DeepSeek Web.
+
+Language can follow the browser or be set to English or Simplified Chinese. DeepSeek++ keeps the side panel, context menus, tool results, built-in Skill behavior, and continuation prompts in the selected language while preserving user-authored memories, presets, custom Skills, automation tasks, and sync data as written.
 
 ## Table of Contents
 
@@ -54,6 +56,7 @@ In plain terms, it is a DeepSeek Chrome extension, DeepSeek MCP tools extension,
 |------|--------------------------|
 | AI agent browser extension | Turns DeepSeek Web into a browser-based workspace that can continue tasks, call tools, reuse memory, and schedule automation. |
 | DeepSeek browser extension / DeepSeek Chrome extension | Adds side-panel chat, right-click text sending, tool-result rendering, and Chrome / Edge / Firefox support for DeepSeek Web. |
+| Multilingual DeepSeek extension | Switches between English and Simplified Chinese, keeping UI, built-in tool descriptions, and model continuation behavior in the same language. |
 | DeepSeek MCP tools | Lets you manage MCP services, tool permissions, and execution status in the side panel, then sends tool results back into the same conversation. |
 | DeepSeek memory | Automatically saves, filters, and injects long-term memory so different conversations can reuse user preferences, project context, and common facts. |
 | DeepSeek Skills / `/skill` workflows | Switches quickly between built-in, custom, and GitHub-imported Skills for expert modes and task templates. |
@@ -64,6 +67,7 @@ In plain terms, it is a DeepSeek Chrome extension, DeepSeek MCP tools extension,
 ## Use Cases
 
 - Turn DeepSeek Web into an AI agent workspace with tool execution, MCP, memory, and automation.
+- Use DeepSeek++ in an English or Simplified Chinese workflow with matching UI, tool guidance, and model continuation prompts.
 - Use DeepSeek side-panel chat, selected-text actions, and reusable prompt scenarios directly in Chrome, Edge, or Firefox.
 - Save project context, personal preferences, common workflows, and document-processing routines as long-term memory and reusable Skills.
 - Back up your own DeepSeek conversation history locally as readable files for archive, migration, or later search.
@@ -79,6 +83,13 @@ In plain terms, it is a DeepSeek Chrome extension, DeepSeek MCP tools extension,
 - **Official API Key** - After a Key is configured, side-panel chat and right-click scenarios can work on normal web pages; without a Key, right-click scenarios stay limited to DeepSeek Web.
 - **Independent new conversations** - Create new side-panel conversations to avoid mixing with the current page conversation.
 - **Streaming display** - Responses render continuously in the side panel. If login is missing, the extension prompts you to return to DeepSeek and sign in.
+
+### Multilingual Experience
+
+- **Language selection** - Follow the browser, or choose English or Simplified Chinese.
+- **Consistent runtime language** - The side panel, context menus, tool results, built-in tool descriptions, and continuation prompts follow the selected language.
+- **Matching model behavior** - Built-in Skills, tool-call guidance, web-search prompts, and long-task continuation prompts use the current language.
+- **User content stays unchanged** - User-created memories, presets, custom Skills, automation prompts, MCP settings, and sync data are not translated or rewritten when the language changes.
 
 ### Native-Feeling Tool Calls
 
@@ -231,7 +242,8 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
 | Right-click scenarios | Selected text can be sent to side-panel chat directly or wrapped with custom scenarios for cross-page summarizing, explaining, and rewriting. |
 | Python interpreter tool | Shell MCP adds the `python_exec` capability, with clearer enablement, permission, and status controls in the side-panel Tools page. |
 | Local tool reliability | Shell Host tool contracts, execution policy, and smoke coverage are aligned to reduce state differences between command tools and interpreter tools. |
-| Release safeguards | Dev dependency vulnerabilities are fixed, while release checks continue to cover cross-browser packaging, MCP, automation, prompt freeze, workflows, and assets. |
+| Multilingual experience | Adds language selection for English or Simplified Chinese, with matching side-panel UI, context menus, tool results, built-in Skills, and model continuation prompts. |
+| Release safeguards | Dev dependency vulnerabilities are fixed, while release checks continue to cover cross-browser packaging, MCP, automation, multilingual validation, workflows, and assets. |
 
 Thanks to this release's contributor: [@IjalG](https://github.com/IjalG) for the Python interpreter / `python_exec` capability.
 

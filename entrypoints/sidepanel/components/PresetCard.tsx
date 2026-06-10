@@ -1,4 +1,5 @@
 import type { SystemPromptPreset } from '../../../core/types';
+import { useI18n } from '../i18n';
 
 interface Props {
   preset: SystemPromptPreset;
@@ -10,6 +11,8 @@ interface Props {
 }
 
 export default function PresetCard({ preset, isActive, onActivate, onDeactivate, onEdit, onDelete }: Props) {
+  const { t } = useI18n();
+
   return (
     <div
       className="ds-card rounded-xl p-3.5 group transition-all duration-150"
@@ -22,7 +25,7 @@ export default function PresetCard({ preset, isActive, onActivate, onDeactivate,
           </span>
           {isActive && (
             <span className="ds-badge-success inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full font-medium">
-              生效中
+              {t('sidepanel.preset.activeBadge')}
             </span>
           )}
         </div>
@@ -35,20 +38,20 @@ export default function PresetCard({ preset, isActive, onActivate, onDeactivate,
               background: isActive ? 'var(--ds-surface)' : 'transparent',
             }}
           >
-            {isActive ? '停用' : '启用'}
+            {isActive ? t('common.deactivate') : t('common.enable')}
           </button>
           <button
             onClick={onEdit}
             className="text-[11px] px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150"
             style={{ color: 'var(--ds-text-secondary)' }}
           >
-            编辑
+            {t('common.edit')}
           </button>
           <button
             onClick={onDelete}
             className="ds-text-btn-delete text-[11px] px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150"
           >
-            删除
+            {t('common.delete')}
           </button>
         </div>
       </div>

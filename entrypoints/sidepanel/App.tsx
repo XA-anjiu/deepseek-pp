@@ -1,6 +1,8 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
+import type { LocaleMessageKey } from '../../core/i18n';
 import { getExtensionVersion } from '../../core/version';
 import { getChatEnabled } from '../../core/chat/store';
+import { useI18n } from './i18n';
 import { setPendingText } from './pending-text';
 
 type Tab = 'chat' | 'memory' | 'capabilities' | 'preset' | 'automation' | 'settings';
@@ -12,16 +14,17 @@ const AutomationPage = lazy(() => import('./pages/AutomationPage'));
 const CapabilitiesPage = lazy(() => import('./pages/CapabilitiesPage'));
 const ChatPage = lazy(() => import('./pages/ChatPage'));
 
-const TABS: { key: Tab; label: string; icon: string }[] = [
-  { key: 'chat', label: '对话', icon: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z' },
-  { key: 'memory', label: '记忆', icon: 'M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z' },
-  { key: 'capabilities', label: '能力', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
-  { key: 'preset', label: '预设', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
-  { key: 'automation', label: '自动化', icon: 'M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z' },
-  { key: 'settings', label: '设置', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
+const TABS: { key: Tab; labelKey: LocaleMessageKey; icon: string }[] = [
+  { key: 'chat', labelKey: 'app.tabs.chat', icon: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z' },
+  { key: 'memory', labelKey: 'app.tabs.memory', icon: 'M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z' },
+  { key: 'capabilities', labelKey: 'app.tabs.capabilities', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
+  { key: 'preset', labelKey: 'app.tabs.preset', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+  { key: 'automation', labelKey: 'app.tabs.automation', icon: 'M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { key: 'settings', labelKey: 'app.tabs.settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
 ];
 
 export default function App() {
+  const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('chat');
   const version = getExtensionVersion();
   const [chatEnabled, setChatEnabledState] = useState<boolean | null>(null);
@@ -43,7 +46,7 @@ export default function App() {
     }
   }, [chatEnabled, tab]);
 
-  // 挂载时从 storage 读取待消费文本（处理侧边栏刚打开、message 丢失的情况）
+  // Read pending text on mount in case the sidepanel opened after the message was sent.
   useEffect(() => {
     chrome.storage.local.get('pendingChatText').then((data) => {
       const text = data.pendingChatText as string | undefined;
@@ -84,38 +87,41 @@ export default function App() {
           </h1>
         </div>
         <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ color: 'var(--ds-text-tertiary)', background: 'var(--ds-surface)' }}>
-          v{version}
+          {t('app.version', { version })}
         </span>
       </header>
 
-      <nav className="side-tabs" aria-label="侧栏导航">
-        {TABS.filter(t => chatEnabled !== false || t.key !== 'chat').map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={`side-tab${tab === t.key ? ' side-tab-active' : ''}`}
-            aria-current={tab === t.key ? 'page' : undefined}
-            title={t.label}
-          >
-            <svg
-              className="side-tab-icon"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-              aria-hidden="true"
+      <nav className="side-tabs" aria-label={t('app.sideNavLabel')}>
+        {TABS.filter(tabConfig => chatEnabled !== false || tabConfig.key !== 'chat').map((tabConfig) => {
+          const label = t(tabConfig.labelKey);
+          return (
+            <button
+              key={tabConfig.key}
+              type="button"
+              onClick={() => setTab(tabConfig.key)}
+              className={`side-tab${tab === tabConfig.key ? ' side-tab-active' : ''}`}
+              aria-current={tab === tabConfig.key ? 'page' : undefined}
+              title={label}
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d={t.icon} />
-            </svg>
-            <span className="side-tab-label">{t.label}</span>
-            {tab === t.key && <span className="side-tab-indicator" />}
-          </button>
-        ))}
+              <svg
+                className="side-tab-icon"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+                aria-hidden="true"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d={tabConfig.icon} />
+              </svg>
+              <span className="side-tab-label">{label}</span>
+              {tab === tabConfig.key && <span className="side-tab-indicator" />}
+            </button>
+          );
+        })}
       </nav>
 
       <main className="flex-1 overflow-y-auto">
-        <Suspense fallback={<div className="p-4 text-sm" style={{ color: 'var(--ds-text-tertiary)' }}>加载中...</div>}>
+        <Suspense fallback={<div className="p-4 text-sm" style={{ color: 'var(--ds-text-tertiary)' }}>{t('common.loading')}</div>}>
           {tab === 'chat' && <ChatPage />}
           {tab === 'memory' && <MemoryPage />}
           {tab === 'capabilities' && <CapabilitiesPage />}

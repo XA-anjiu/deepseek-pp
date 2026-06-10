@@ -31,12 +31,21 @@ const expectedHostPermissions = [
   '*://www.bing.com/*',
 ];
 const expectedOptionalHostPermissions = ['http://*/*', 'https://*/*'];
+const expectedLocalizedManifest = {
+  default_locale: 'en',
+  name: '__MSG_extension_name__',
+  description: '__MSG_extension_description__',
+  actionTitle: '__MSG_extension_action_title__',
+};
 
 for (const target of targets) {
   const manifest = readJson(target.manifestPath, `Run npm run build:all before npm run verify:manifest-policy.`);
   if (!manifest) continue;
 
   assertEqual(manifest.version, packageJson.version, `${target.browser}: manifest version must match package.json`);
+  assertEqual(manifest.default_locale, expectedLocalizedManifest.default_locale, `${target.browser}: default_locale`);
+  assertEqual(manifest.name, expectedLocalizedManifest.name, `${target.browser}: localized name`);
+  assertEqual(manifest.description, expectedLocalizedManifest.description, `${target.browser}: localized description`);
   assertSetEqual(manifest.permissions, target.permissions, `${target.browser}: permissions`);
   assertSetEqual(manifest.host_permissions, expectedHostPermissions, `${target.browser}: host_permissions`);
   assertSetEqual(
@@ -47,6 +56,7 @@ for (const target of targets) {
 
   if (target.permissions.includes('sidePanel')) {
     assert(Boolean(manifest.side_panel?.default_path), `${target.browser}: side_panel.default_path is required`);
+    assertEqual(manifest.action?.default_title, expectedLocalizedManifest.actionTitle, `${target.browser}: action.default_title`);
   } else {
     assert(!manifest.side_panel, `${target.browser}: side_panel must be omitted`);
   }
@@ -69,6 +79,10 @@ assertIncludes(background, 'chrome.contextMenus.create', 'contextMenus permissio
 assertIncludes(background, 'chrome.contextMenus.onClicked.addListener', 'contextMenus permission must handle clicks');
 assertIncludes(background, 'chrome.sidePanel', 'sidePanel permission must use the side panel API');
 assertIncludes(wxtConfig, 'web_accessible_resources', 'web accessible resources must be declared in manifest config');
+assertIncludes(wxtConfig, "default_locale: 'en'", 'manifest config must declare default locale');
+assertIncludes(wxtConfig, '__MSG_extension_name__', 'manifest config must use localized name');
+assertIncludes(wxtConfig, '__MSG_extension_description__', 'manifest config must use localized description');
+assertIncludes(wxtConfig, '__MSG_extension_action_title__', 'manifest config must use localized action title');
 
 for (const permission of ['storage', 'alarms', 'contextMenus', 'nativeMessaging', 'sidePanel']) {
   assertIncludes(privacyPolicy, `\`${permission}\``, `privacy policy must document ${permission}`);

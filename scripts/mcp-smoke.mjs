@@ -437,7 +437,7 @@ function stripToolCalls(text, descriptors) {
 
 function renderToolBlockSnapshot(executions) {
   return [
-    `已执行工具（${executions.length}次）`,
+    `Executed tools (${executions.length})`,
     ...executions.map((execution) => {
       const name = execution.provider?.displayName
         ? `${execution.provider.displayName} / ${execution.name}`

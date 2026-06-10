@@ -1,4 +1,5 @@
 import type { Memory, ToolDescriptor, ToolExecutionRecord } from '../types';
+import type { SupportedLocale } from '../i18n';
 
 export type AutomationId = string;
 export type AutomationRunId = string;
@@ -96,6 +97,7 @@ export interface AutomationRunnerRequest {
   chatSessionId: string | null;
   parentMessageId: number | null;
   promptOptions: AutomationPromptOptions;
+  locale?: SupportedLocale;
   promptContext?: AutomationPromptContext;
   requestedAt: number;
 }

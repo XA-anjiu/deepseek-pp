@@ -9,17 +9,18 @@ import {
   getMcpToolDescriptors,
   refreshMcpServerDiscovery,
 } from '../mcp/discovery';
+import { DEFAULT_LOCALE, translate, type SupportedLocale } from '../i18n';
 import { getAllMcpServers } from '../mcp/store';
 import type { Memory, NewMemory } from '../types';
 import { appendToolCallHistory } from './history';
 import {
-  MEMORY_TOOL_DESCRIPTORS,
+  createMemoryToolDescriptors,
   executeMemoryToolCall,
   isMemoryToolName,
   type MemoryToolRuntime,
 } from './memory';
 import {
-  WEB_SEARCH_TOOL_DESCRIPTORS,
+  createWebSearchToolDescriptors,
   executeWebSearchToolCall,
   isWebSearchToolName,
 } from './web-search';
@@ -42,42 +43,50 @@ const memoryRuntime: MemoryToolRuntime = {
   },
 };
 
-export async function getRuntimeToolDescriptors(): Promise<ToolDescriptor[]> {
+export async function getRuntimeToolDescriptors(
+  locale: SupportedLocale = DEFAULT_LOCALE,
+): Promise<ToolDescriptor[]> {
   const webSettings = await getWebToolSettings();
-  const enabledWebDescriptors = WEB_SEARCH_TOOL_DESCRIPTORS.filter(
+  const enabledWebDescriptors = createWebSearchToolDescriptors(locale).filter(
     (d) => webSettings[d.name as keyof typeof webSettings] !== false,
   );
   return [
-    ...MEMORY_TOOL_DESCRIPTORS,
+    ...createMemoryToolDescriptors(locale),
     ...enabledWebDescriptors,
     ...await getMcpToolDescriptors(),
   ];
 }
 
-export async function refreshRuntimeToolDescriptors(): Promise<ToolDescriptor[]> {
+export async function refreshRuntimeToolDescriptors(
+  locale: SupportedLocale = DEFAULT_LOCALE,
+): Promise<ToolDescriptor[]> {
   const servers = await getAllMcpServers({ includeSecrets: false });
   await Promise.all(
     servers
       .filter((server) => server.enabled)
       .map((server) => refreshMcpServerDiscovery(server.id)),
   );
-  return getRuntimeToolDescriptors();
+  return getRuntimeToolDescriptors(locale);
 }
 
 export async function executeRuntimeToolCall(
   call: ToolCall,
   source: ToolExecutionTrigger,
+  locale: SupportedLocale = DEFAULT_LOCALE,
 ): Promise<ToolResult> {
-  const result = await executeToolCallWithoutHistory(call);
+  const result = await executeToolCallWithoutHistory(call, locale);
   await appendToolCallHistory(call, result, source);
   return result;
 }
 
-async function executeToolCallWithoutHistory(call: ToolCall): Promise<ToolResult> {
+async function executeToolCallWithoutHistory(
+  call: ToolCall,
+  locale: SupportedLocale,
+): Promise<ToolResult> {
   if (call.parseError) {
     return {
       ok: false,
-      summary: '工具格式错误',
+      summary: translate(locale, 'tool.runtime.invalidFormat'),
       detail: call.parseError.message,
       name: call.name,
       provider: call.provider,
@@ -87,11 +96,11 @@ async function executeToolCallWithoutHistory(call: ToolCall): Promise<ToolResult
   }
 
   if (isMemoryToolName(call.name)) {
-    return executeMemoryToolCall(memoryRuntime, call);
+    return executeMemoryToolCall(memoryRuntime, call, locale);
   }
 
   if (isWebSearchToolName(call.name)) {
-    return executeWebSearchToolCall(call);
+    return executeWebSearchToolCall(call, locale);
   }
 
   if (call.provider?.kind === 'mcp' || call.descriptorId?.startsWith('mcp:')) {
@@ -100,7 +109,7 @@ async function executeToolCallWithoutHistory(call: ToolCall): Promise<ToolResult
 
   return {
     ok: false,
-    summary: '未知工具',
+    summary: translate(locale, 'tool.runtime.unknownTool'),
     detail: `Unsupported tool: ${call.name}`,
     name: call.name,
     provider: call.provider,

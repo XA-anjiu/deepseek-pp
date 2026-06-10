@@ -1,4 +1,5 @@
 import type { ToolCall, ToolDescriptor, ToolExecutionRecord } from '../types';
+import type { SupportedLocale } from '../i18n';
 
 export interface InlineAgentStartPayload {
   loopId: string;
@@ -9,6 +10,7 @@ export interface InlineAgentStartPayload {
   toolExecutions: ToolExecutionRecord[];
   promptOptions: InlineAgentPromptOptions;
   toolDescriptors: ToolDescriptor[];
+  locale?: SupportedLocale;
   powWasmUrl?: string;
 }
 

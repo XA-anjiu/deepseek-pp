@@ -5,6 +5,7 @@ import type {
   GitHubSkillPreviewItem,
 } from '../../../core/types';
 import { requestGitHubApiPermission } from '../github-permission';
+import { useI18n } from '../i18n';
 
 type ImportState = 'idle' | 'previewing' | 'ready' | 'importing' | 'success' | 'error';
 
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export default function GitHubSkillImportPanel({ onImported, onCancel }: Props) {
+  const { t } = useI18n();
   const [url, setUrl] = useState('');
   const [state, setState] = useState<ImportState>('idle');
   const [preview, setPreview] = useState<GitHubSkillPreview | null>(null);
@@ -44,12 +46,12 @@ export default function GitHubSkillImportPanel({ onImported, onCancel }: Props) 
     setResult(null);
     try {
       const granted = await requestGitHubApiPermission();
-      if (!granted) throw new Error('需要 GitHub API 访问权限才能读取仓库 Skill');
+      if (!granted) throw new Error(t('sidepanel.githubSkillImport.permissionError'));
       const response = await chrome.runtime.sendMessage({
         type: 'PREVIEW_GITHUB_SKILL_SOURCE',
         payload: { url: requestedUrl },
       });
-      if (response?.ok === false) throw new Error(response.error ?? '预览失败');
+      if (response?.ok === false) throw new Error(response.error ?? t('sidepanel.githubSkillImport.previewFailed'));
       if (requestId !== previewRequestIdRef.current || latestUrlRef.current.trim() !== requestedUrl) return;
       const nextPreview = response as GitHubSkillPreview;
       setPreview(nextPreview);
@@ -76,11 +78,11 @@ export default function GitHubSkillImportPanel({ onImported, onCancel }: Props) 
           selectedPaths: [...selectedPaths],
         },
       });
-      if (response?.ok === false) throw new Error(response.error ?? '导入失败');
+      if (response?.ok === false) throw new Error(response.error ?? t('sidepanel.githubSkillImport.importFailed'));
       const importResult = response as GitHubSkillImportResult;
       setResult(importResult);
       setState('success');
-      setMessage(`已导入 ${importResult.imported.length} 个 Skill`);
+      setMessage(t('sidepanel.githubSkillImport.importedMessage', { count: importResult.imported.length }));
       await onImported();
     } catch (error) {
       setState('error');
@@ -107,10 +109,10 @@ export default function GitHubSkillImportPanel({ onImported, onCancel }: Props) 
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>
-            从 GitHub 导入 Skill
+            {t('sidepanel.githubSkillImport.title')}
           </h3>
           <p className="text-[11px] mt-1 leading-relaxed" style={{ color: 'var(--ds-text-tertiary)' }}>
-            支持仓库、目录或单个 SKILL.md 链接。导入前会预览内容，不会覆盖本地自定义 Skill。
+            {t('sidepanel.githubSkillImport.description')}
           </p>
         </div>
         <button
@@ -118,7 +120,7 @@ export default function GitHubSkillImportPanel({ onImported, onCancel }: Props) 
           onClick={onCancel}
           className="ds-btn-cancel shrink-0 px-2.5 py-1.5 text-[11px] font-medium rounded-lg"
         >
-          关闭
+          {t('common.close')}
         </button>
       </div>
 
@@ -126,7 +128,7 @@ export default function GitHubSkillImportPanel({ onImported, onCancel }: Props) 
         <div className="flex gap-2">
           <input
             type="url"
-            placeholder="https://github.com/owner/repo 或 .../SKILL.md"
+            placeholder={t('sidepanel.githubSkillImport.urlPlaceholder')}
             value={url}
             onChange={(event) => {
               const nextUrl = event.target.value;
@@ -149,7 +151,7 @@ export default function GitHubSkillImportPanel({ onImported, onCancel }: Props) 
             className="ds-btn-secondary shrink-0 px-3 py-2 text-[11px] font-medium rounded-lg disabled:opacity-40 flex items-center gap-1.5"
           >
             {state === 'previewing' && <Spinner />}
-            预览
+            {t('common.preview')}
           </button>
         </div>
 
@@ -171,10 +173,14 @@ export default function GitHubSkillImportPanel({ onImported, onCancel }: Props) 
               onClick={toggleAll}
               className="ds-btn-secondary px-2.5 py-1.5 text-[11px] font-medium rounded-lg"
             >
-              {allSelected ? '取消全选' : '全选'}
+              {allSelected ? t('sidepanel.githubSkillImport.clearSelection') : t('sidepanel.githubSkillImport.selectAll')}
             </button>
             <span className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>
-              已选 {selectedCount} / {preview.skills.length} · {formatBytes(selectedBytes)}
+              {t('sidepanel.githubSkillImport.selectedSummary', {
+                selected: selectedCount,
+                total: preview.skills.length,
+                bytes: formatBytes(selectedBytes),
+              })}
             </span>
           </div>
 
@@ -195,7 +201,7 @@ export default function GitHubSkillImportPanel({ onImported, onCancel }: Props) 
               onClick={onCancel}
               className="ds-btn-cancel px-3.5 py-1.5 text-xs font-medium rounded-lg"
             >
-              取消
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -204,7 +210,7 @@ export default function GitHubSkillImportPanel({ onImported, onCancel }: Props) 
               className="ds-btn-primary px-4 py-1.5 text-xs font-medium rounded-lg disabled:opacity-40 flex items-center gap-1.5"
             >
               {state === 'importing' && <Spinner />}
-              导入选中 Skill
+              {t('sidepanel.githubSkillImport.importSelected')}
             </button>
           </div>
         </div>
@@ -218,6 +224,7 @@ export default function GitHubSkillImportPanel({ onImported, onCancel }: Props) 
 }
 
 function SourceSummary({ preview }: { preview: GitHubSkillPreview }) {
+  const { t } = useI18n();
   const { source } = preview;
   const warnings = [
     ...preview.warnings,
@@ -232,7 +239,7 @@ function SourceSummary({ preview }: { preview: GitHubSkillPreview }) {
             {source.repository}
           </div>
           <div className="text-[11px] mt-1 truncate" style={{ color: 'var(--ds-text-tertiary)' }}>
-            {source.rootPath || 'repo root'} · {source.ref} · {shortSha(source.commitSha)}
+            {source.rootPath || t('sidepanel.githubSkillImport.repoRoot')} · {source.ref} · {shortSha(source.commitSha)}
           </div>
         </div>
         <a
@@ -240,7 +247,7 @@ function SourceSummary({ preview }: { preview: GitHubSkillPreview }) {
           target="_blank"
           rel="noreferrer"
           className="ds-btn-secondary shrink-0 w-7 h-7 rounded-lg flex items-center justify-center"
-          title="打开仓库"
+          title={t('sidepanel.githubSkillImport.openRepository')}
         >
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.1}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H18m0 0v4.5M18 6l-7.5 7.5M6 6h3m-3 0v12h12v-3" />
@@ -248,17 +255,17 @@ function SourceSummary({ preview }: { preview: GitHubSkillPreview }) {
         </a>
       </div>
       <div className="grid grid-cols-2 gap-2 text-[11px]">
-        <Meta label="License" value={source.licenseSpdxId ?? source.licenseName ?? 'Unknown'} />
-        <Meta label="Version" value={source.packageVersion ?? '-'} />
-        <Meta label="Skill" value={String(preview.skills.length)} />
-        <Meta label="Default" value={source.defaultBranch} />
+        <Meta label={t('sidepanel.githubSkillImport.meta.license')} value={source.licenseSpdxId ?? source.licenseName ?? t('sidepanel.githubSkillImport.unknownLicense')} />
+        <Meta label={t('sidepanel.githubSkillImport.meta.version')} value={source.packageVersion ?? '-'} />
+        <Meta label={t('sidepanel.githubSkillImport.meta.skill')} value={String(preview.skills.length)} />
+        <Meta label={t('sidepanel.githubSkillImport.meta.defaultBranch')} value={source.defaultBranch} />
       </div>
       {warnings.length > 0 && (
         <div className="rounded-lg px-3 py-2 text-[11px] leading-relaxed" style={{ color: 'var(--ds-warning)', background: 'var(--ds-warning-bg)' }}>
           {warnings.slice(0, 4).map((warning) => (
             <div key={warning}>• {warning}</div>
           ))}
-          {warnings.length > 4 && <div>• 还有 {warnings.length - 4} 条 warning</div>}
+          {warnings.length > 4 && <div>• {t('sidepanel.githubSkillImport.warningOverflow', { count: warnings.length - 4 })}</div>}
         </div>
       )}
     </div>
@@ -270,6 +277,8 @@ function PreviewSkillRow({ skill, checked, onToggle }: {
   checked: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <label className="ds-card rounded-xl p-3 block cursor-pointer">
       <div className="flex items-start gap-3">
@@ -286,7 +295,7 @@ function PreviewSkillRow({ skill, checked, onToggle }: {
             </code>
             {skill.nameChanged && (
               <span className="ds-badge-warning inline-flex text-[10px] px-1.5 py-0.5 rounded-full font-medium">
-                已改名
+                {t('sidepanel.githubSkillImport.renamedBadge')}
               </span>
             )}
             {skill.version && (
@@ -301,9 +310,9 @@ function PreviewSkillRow({ skill, checked, onToggle }: {
           <div className="flex flex-wrap gap-1.5 mt-2 text-[10px]" style={{ color: 'var(--ds-text-tertiary)' }}>
             <span className="ds-tag px-1.5 py-0.5 rounded-full">{skill.path}</span>
             <span className="ds-tag px-1.5 py-0.5 rounded-full">{formatBytes(skill.bodyBytes)}</span>
-            <span className="ds-tag px-1.5 py-0.5 rounded-full">资源 {skill.includedFiles.length}</span>
+            <span className="ds-tag px-1.5 py-0.5 rounded-full">{t('sidepanel.githubSkillImport.resourceCount', { count: skill.includedFiles.length })}</span>
             {skill.omittedFiles.length > 0 && (
-              <span className="ds-tag px-1.5 py-0.5 rounded-full">省略 {skill.omittedFiles.length}</span>
+              <span className="ds-tag px-1.5 py-0.5 rounded-full">{t('sidepanel.githubSkillImport.omittedCount', { count: skill.omittedFiles.length })}</span>
             )}
           </div>
         </div>
@@ -317,6 +326,7 @@ function StatusMessage({ state, message, result }: {
   message: string;
   result: GitHubSkillImportResult | null;
 }) {
+  const { t } = useI18n();
   const success = state === 'success';
   return (
     <div
@@ -328,7 +338,7 @@ function StatusMessage({ state, message, result }: {
     >
       <div>{message}</div>
       {result && result.renamed > 0 && (
-        <div>有 {result.renamed} 个 Skill 因命名冲突自动加后缀。</div>
+        <div>{t('sidepanel.githubSkillImport.renamedNotice', { count: result.renamed })}</div>
       )}
     </div>
   );

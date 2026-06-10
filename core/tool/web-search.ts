@@ -1,3 +1,4 @@
+import { DEFAULT_LOCALE, translate, type SupportedLocale } from '../i18n';
 import type {
   JsonValue,
   ToolCall,
@@ -9,7 +10,7 @@ import type {
 export const WEB_SEARCH_TOOL_PROVIDER: ToolProviderIdentity = {
   kind: 'local',
   id: 'web',
-  displayName: 'DeepSeek++ Web Search',
+  displayName: translate(DEFAULT_LOCALE, 'tool.web.providerName'),
   transport: 'in_process',
 };
 
@@ -17,19 +18,31 @@ export const WEB_SEARCH_TOOL_NAMES = ['web_search', 'web_fetch'] as const;
 
 export type WebSearchToolName = typeof WEB_SEARCH_TOOL_NAMES[number];
 
-export const WEB_SEARCH_TOOL_DESCRIPTORS: ToolDescriptor[] = [
-  {
+export function createWebSearchToolProviderIdentity(
+  locale: SupportedLocale = DEFAULT_LOCALE,
+): ToolProviderIdentity {
+  return {
+    ...WEB_SEARCH_TOOL_PROVIDER,
+    displayName: translate(locale, 'tool.web.providerName'),
+  };
+}
+
+export function createWebSearchToolDescriptors(
+  locale: SupportedLocale = DEFAULT_LOCALE,
+): ToolDescriptor[] {
+  const provider = createWebSearchToolProviderIdentity(locale);
+  return [{
     id: 'local:web:web_search',
-    provider: WEB_SEARCH_TOOL_PROVIDER,
+    provider,
     name: 'web_search',
     invocationName: 'web_search',
-    title: '搜索互联网',
-    description: '搜索互联网，返回与查询相关的网页标题、URL 和摘要',
+    title: translate(locale, 'tool.web.searchTitle'),
+    description: translate(locale, 'tool.web.searchDescription'),
     inputSchema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: '搜索查询关键词' },
-        topK: { type: 'integer', description: '返回结果数量，默认 5' },
+        query: { type: 'string', description: translate(locale, 'tool.web.queryDescription') },
+        topK: { type: 'integer', description: translate(locale, 'tool.web.topKDescription') },
       },
       required: ['query'],
       additionalProperties: false,
@@ -42,15 +55,15 @@ export const WEB_SEARCH_TOOL_DESCRIPTORS: ToolDescriptor[] = [
   },
   {
     id: 'local:web:web_fetch',
-    provider: WEB_SEARCH_TOOL_PROVIDER,
+    provider,
     name: 'web_fetch',
     invocationName: 'web_fetch',
-    title: '获取网页',
-    description: '下载指定 URL 的页面内容，返回可视文本（自动去除导航、脚本和样式）',
+    title: translate(locale, 'tool.web.fetchTitle'),
+    description: translate(locale, 'tool.web.fetchDescription'),
     inputSchema: {
       type: 'object',
       properties: {
-        url: { type: 'string', description: '要抓取的完整 URL（http:// 或 https://）' },
+        url: { type: 'string', description: translate(locale, 'tool.web.urlDescription') },
       },
       required: ['url'],
       additionalProperties: false,
@@ -61,23 +74,30 @@ export const WEB_SEARCH_TOOL_DESCRIPTORS: ToolDescriptor[] = [
       risk: 'medium',
     },
   },
-];
+  ];
+}
+
+export const WEB_SEARCH_TOOL_DESCRIPTORS: ToolDescriptor[] = createWebSearchToolDescriptors(DEFAULT_LOCALE);
 
 export function isWebSearchToolName(name: string): name is WebSearchToolName {
   return (WEB_SEARCH_TOOL_NAMES as readonly string[]).includes(name);
 }
 
-export async function executeWebSearchToolCall(call: ToolCall): Promise<ToolResult> {
+export async function executeWebSearchToolCall(
+  call: ToolCall,
+  locale: SupportedLocale = DEFAULT_LOCALE,
+): Promise<ToolResult> {
   switch (call.name) {
     case 'web_search':
-      return performWebSearch(call);
+      return performWebSearch(call, locale);
     case 'web_fetch':
-      return performWebFetch(call);
+      return performWebFetch(call, locale);
     default:
       return {
         ok: false,
         name: call.name,
-        summary: '不支持的搜索工具',
+        provider: call.provider ?? createWebSearchToolProviderIdentity(locale),
+        summary: translate(locale, 'tool.web.unsupported'),
         error: {
           code: 'web_tool_unsupported',
           message: `Unsupported web tool: ${call.name}`,
@@ -88,7 +108,7 @@ export async function executeWebSearchToolCall(call: ToolCall): Promise<ToolResu
 }
 
 // ---------------------------------------------------------------------------
-// Web Search via Bing (不需要 API Key，国内可访问)
+// Web Search via Bing without requiring an API key.
 // ---------------------------------------------------------------------------
 
 interface SearchResult {
@@ -97,13 +117,14 @@ interface SearchResult {
   snippet: string;
 }
 
-async function performWebSearch(call: ToolCall): Promise<ToolResult> {
+async function performWebSearch(call: ToolCall, locale: SupportedLocale): Promise<ToolResult> {
   const query = typeof call.payload.query === 'string' ? call.payload.query.trim() : '';
   if (!query) {
     return {
       ok: false,
       name: call.name,
-      summary: '搜索查询不能为空',
+      provider: call.provider ?? createWebSearchToolProviderIdentity(locale),
+      summary: translate(locale, 'tool.web.emptyQuery'),
       error: { code: 'empty_query', message: 'query is required', retryable: false },
     };
   }
@@ -125,7 +146,7 @@ async function performWebSearch(call: ToolCall): Promise<ToolResult> {
       break;
     }
     try {
-      const results = await bingSearch(domains[i], query, topK);
+      const results = await bingSearch(domains[i], query, topK, locale);
       if (results.length === 0) {
         lastError = `${domains[i]} returned no parseable search results`;
         continue;
@@ -133,7 +154,8 @@ async function performWebSearch(call: ToolCall): Promise<ToolResult> {
       return {
         ok: true,
         name: call.name,
-        summary: `搜索完成，找到 ${results.length} 条结果`,
+        provider: call.provider ?? createWebSearchToolProviderIdentity(locale),
+        summary: translate(locale, 'tool.web.searchComplete', { count: results.length }),
         output: results as unknown as JsonValue,
         detail: results
           .map((r, i) => `${i + 1}. [${r.title}](${r.url})\n   ${r.snippet}`)
@@ -157,12 +179,15 @@ async function performWebSearch(call: ToolCall): Promise<ToolResult> {
   return {
     ok: false,
     name: call.name,
-    summary: hasNoParseableResults ? '搜索无结果' : '搜索失败',
+    provider: call.provider ?? createWebSearchToolProviderIdentity(locale),
+    summary: hasNoParseableResults
+      ? translate(locale, 'tool.web.searchNoResults')
+      : translate(locale, 'tool.web.searchFailed'),
     detail: isPermissionError
-      ? `扩展没有访问必应的权限。请完全移除扩展后重新加载 dist/chrome-mv3 目录，或在 chrome://extensions → DeepSeek++ 详情中确认 cn.bing.com 已列入网站访问权限。`
+      ? translate(locale, 'tool.web.permissionDenied')
       : hasNoParseableResults
-        ? `未找到可解析搜索结果: ${lastError}`
-        : `搜索失败: ${lastError}`,
+        ? translate(locale, 'tool.web.noParseableResults', { error: lastError ?? 'unknown error' })
+        : translate(locale, 'tool.web.searchFailedDetail', { error: lastError ?? 'unknown error' }),
     error: {
       code: isPermissionError
         ? 'search_permission_denied'
@@ -175,7 +200,12 @@ async function performWebSearch(call: ToolCall): Promise<ToolResult> {
   };
 }
 
-async function bingSearch(domain: string, query: string, topK: number): Promise<SearchResult[]> {
+async function bingSearch(
+  domain: string,
+  query: string,
+  topK: number,
+  locale: SupportedLocale,
+): Promise<SearchResult[]> {
   let url: URL;
   try {
     url = new URL(`https://${domain}/search`);
@@ -194,7 +224,7 @@ async function bingSearch(domain: string, query: string, topK: number): Promise<
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Accept-Language': locale === 'en' ? 'en-US,en;q=0.9,zh-CN;q=0.6' : 'zh-CN,zh;q=0.9,en;q=0.8',
         Accept: 'text/html,application/xhtml+xml',
       },
       signal: controller.signal,
@@ -269,13 +299,14 @@ function parseBingResults(html: string, topK: number): SearchResult[] {
 // Web Fetch: download a URL and extract visible text
 // ---------------------------------------------------------------------------
 
-async function performWebFetch(call: ToolCall): Promise<ToolResult> {
+async function performWebFetch(call: ToolCall, locale: SupportedLocale): Promise<ToolResult> {
   const url = typeof call.payload.url === 'string' ? call.payload.url.trim() : '';
   if (!url) {
     return {
       ok: false,
       name: call.name,
-      summary: 'URL 不能为空',
+      provider: call.provider ?? createWebSearchToolProviderIdentity(locale),
+      summary: translate(locale, 'tool.web.emptyUrl'),
       error: { code: 'empty_url', message: 'url is required', retryable: false },
     };
   }
@@ -287,8 +318,9 @@ async function performWebFetch(call: ToolCall): Promise<ToolResult> {
     return {
       ok: false,
       name: call.name,
-      summary: '无效的 URL',
-      detail: `无法解析 URL: ${url}`,
+      provider: call.provider ?? createWebSearchToolProviderIdentity(locale),
+      summary: translate(locale, 'tool.web.invalidUrl'),
+      detail: translate(locale, 'tool.web.invalidUrlDetail', { url }),
       error: { code: 'invalid_url', message: `Invalid URL: ${url}`, retryable: false },
     };
   }
@@ -315,8 +347,9 @@ async function performWebFetch(call: ToolCall): Promise<ToolResult> {
       return {
         ok: true,
         name: call.name,
-        summary: `页面类型: ${contentType}`,
-        detail: `Content-Type: ${contentType}\nURL: ${url}\n（内容非文本，无法显示）`,
+        provider: call.provider ?? createWebSearchToolProviderIdentity(locale),
+        summary: translate(locale, 'tool.web.contentType', { contentType }),
+        detail: translate(locale, 'tool.web.contentTypeDetail', { contentType, url }),
         output: { url, contentType } as unknown as JsonValue,
       };
     }
@@ -326,16 +359,17 @@ async function performWebFetch(call: ToolCall): Promise<ToolResult> {
     const truncated = extracted.length > maxLength;
     const outputText = truncated
       ? extracted.slice(0, maxLength) +
-        `\n\n... [内容已截断，共 ${extracted.length} 字符]`
+        translate(locale, 'tool.web.truncated', { count: extracted.length })
       : extracted;
 
     return {
       ok: true,
       name: call.name,
-      summary: `已获取 ${url}`,
+      provider: call.provider ?? createWebSearchToolProviderIdentity(locale),
+      summary: translate(locale, 'tool.web.fetchComplete', { url }),
       detail: truncated
-        ? `页面长度 ${extracted.length} 字符，已截断至 ${maxLength} 字符`
-        : `页面长度 ${extracted.length} 字符`,
+        ? translate(locale, 'tool.web.fetchTruncatedDetail', { length: extracted.length, maxLength })
+        : translate(locale, 'tool.web.fetchLengthDetail', { length: extracted.length }),
       output: { url, content: outputText, contentType, truncated } as unknown as JsonValue,
     };
   } catch (error) {
@@ -348,9 +382,10 @@ async function performWebFetch(call: ToolCall): Promise<ToolResult> {
     return {
       ok: false,
       name: call.name,
-      summary: '获取页面失败',
+      provider: call.provider ?? createWebSearchToolProviderIdentity(locale),
+      summary: translate(locale, 'tool.web.fetchFailed'),
       detail: isPermissionError
-        ? `无法访问 ${url}，缺少主机权限。`
+        ? translate(locale, 'tool.web.missingHostPermission', { url })
         : message,
       error: {
         code: isPermissionError ? 'fetch_permission_denied' : 'fetch_failed',

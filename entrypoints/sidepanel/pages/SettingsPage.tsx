@@ -15,6 +15,7 @@ import { SVG_PATHS } from '../constants';
 import { getChatEnabled, setChatEnabled } from '../../../core/chat/store';
 import { validateImportedMemory } from '../../../core/sync/schema';
 import ScenarioManager from '../components/ScenarioManager';
+import { useI18n } from '../i18n';
 
 const DEFAULT_SYNC_CONFIG: SyncConfig = {
   url: '',
@@ -35,6 +36,7 @@ const DEFAULT_BACKGROUND_CONFIG: BackgroundConfig = {
 type SyncStatus = 'idle' | 'testing' | 'uploading' | 'downloading' | 'success' | 'error';
 
 export default function SettingsPage() {
+  const { t, locale } = useI18n();
   const [memoryCount, setMemoryCount] = useState(0);
   const [version, setVersion] = useState('');
   const [syncConfig, setSyncConfig] = useState<SyncConfig>(DEFAULT_SYNC_CONFIG);
@@ -280,7 +282,7 @@ export default function SettingsPage() {
     const apiKey = apiKeyInput.trim();
     if (!apiKey) {
       setApiKeyStatus('error');
-      setApiKeyMessage('请输入 DeepSeek API Key');
+      setApiKeyMessage(t('sidepanel.settings.apiKeyRequired'));
       return;
     }
 
@@ -291,7 +293,7 @@ export default function SettingsPage() {
         type: 'SAVE_DEEPSEEK_API_KEY',
         payload: { apiKey },
       });
-      if (!result?.ok) throw new Error(result?.error || '保存失败');
+      if (!result?.ok) throw new Error(result?.error || t('sidepanel.settings.saveFailed'));
 
       if (!chatEnabled) {
         await setChatEnabled(true);
@@ -300,10 +302,10 @@ export default function SettingsPage() {
       setApiKeyConfigured(true);
       setApiKeyInput('');
       setApiKeyStatus('success');
-      setApiKeyMessage('已保存，右键场景可在普通网页使用');
+      setApiKeyMessage(t('sidepanel.settings.apiKeySaved'));
     } catch (error) {
       setApiKeyStatus('error');
-      setApiKeyMessage(error instanceof Error ? error.message : '保存失败');
+      setApiKeyMessage(error instanceof Error ? error.message : t('sidepanel.settings.saveFailed'));
     }
   };
 
@@ -312,14 +314,14 @@ export default function SettingsPage() {
     setApiKeyMessage('');
     try {
       const result = await chrome.runtime.sendMessage({ type: 'CLEAR_DEEPSEEK_API_KEY' });
-      if (!result?.ok) throw new Error(result?.error || '清除失败');
+      if (!result?.ok) throw new Error(result?.error || t('sidepanel.settings.clearFailed'));
       setApiKeyConfigured(false);
       setApiKeyInput('');
       setApiKeyStatus('success');
-      setApiKeyMessage('已清除，右键场景恢复为仅 DeepSeek 网页可用');
+      setApiKeyMessage(t('sidepanel.settings.apiKeyCleared'));
     } catch (error) {
       setApiKeyStatus('error');
-      setApiKeyMessage(error instanceof Error ? error.message : '清除失败');
+      setApiKeyMessage(error instanceof Error ? error.message : t('sidepanel.settings.clearFailed'));
     }
   };
 
@@ -347,7 +349,7 @@ export default function SettingsPage() {
     const granted = await requestPermission(syncConfig.url);
     if (!granted) {
       setSyncStatus('error');
-      setSyncMessage('需要访问权限才能连接 WebDAV 服务器');
+      setSyncMessage(t('sidepanel.settings.webDavPermissionDenied'));
       return;
     }
 
@@ -356,13 +358,17 @@ export default function SettingsPage() {
       await action();
     } catch (e) {
       setSyncStatus('error');
-      setSyncMessage((e as Error).message || '操作失败');
+      setSyncMessage((e as Error).message || t('sidepanel.settings.operationFailed'));
     }
   };
 
   const formatSyncCounts = (counts?: SyncCounts) => {
     if (!counts) return '';
-    return `记忆 ${counts.memories} 条，Skill ${counts.skills} 个，预设 ${counts.presets} 个`;
+    return t('sidepanel.settings.syncCounts', {
+      memories: counts.memories,
+      skills: counts.skills,
+      presets: counts.presets,
+    });
   };
 
   const handleTest = () => {
@@ -370,40 +376,40 @@ export default function SettingsPage() {
       const result = await chrome.runtime.sendMessage({ type: 'WEBDAV_TEST', payload: syncConfig });
       if (result?.ok) {
         setSyncStatus('success');
-        setSyncMessage('连接成功');
+        setSyncMessage(t('sidepanel.settings.connectionSuccess'));
       } else {
-        throw new Error(result?.error || '连接失败');
+        throw new Error(result?.error || t('sidepanel.settings.connectionFailed'));
       }
     });
   };
 
   const handleUploadLocal = () => {
-    if (!confirm('确定要用本地记忆、Skill 和预设覆盖云端数据吗？')) return;
+    if (!confirm(t('sidepanel.settings.uploadConfirm'))) return;
 
     void runSyncAction('uploading', async () => {
       const result = await chrome.runtime.sendMessage({ type: 'WEBDAV_UPLOAD_LOCAL' });
       if (result?.ok) {
         setSyncConfig((prev) => ({ ...prev, lastSyncAt: result.lastSyncAt }));
         setSyncStatus('success');
-        setSyncMessage(`上传完成，已覆盖云端。${formatSyncCounts(result.counts)}`);
+        setSyncMessage(t('sidepanel.settings.uploadSuccess', { counts: formatSyncCounts(result.counts) }));
       } else {
-        throw new Error(result?.error || '上传失败');
+        throw new Error(result?.error || t('sidepanel.settings.uploadFailed'));
       }
     });
   };
 
   const handleDownloadRemote = () => {
-    if (!confirm('确定要用云端记忆、Skill 和预设覆盖本地数据吗？此操作不可撤销。')) return;
+    if (!confirm(t('sidepanel.settings.downloadConfirm'))) return;
 
     void runSyncAction('downloading', async () => {
       const result = await chrome.runtime.sendMessage({ type: 'WEBDAV_DOWNLOAD_REMOTE' });
       if (result?.ok) {
         setSyncConfig((prev) => ({ ...prev, lastSyncAt: result.lastSyncAt }));
         setSyncStatus('success');
-        setSyncMessage(`下载完成，已覆盖本地。${formatSyncCounts(result.counts)}`);
+        setSyncMessage(t('sidepanel.settings.downloadSuccess', { counts: formatSyncCounts(result.counts) }));
         setMemoryCount(result.counts?.memories ?? 0);
       } else {
-        throw new Error(result?.error || '下载失败');
+        throw new Error(result?.error || t('sidepanel.settings.downloadFailed'));
       }
     });
   };
@@ -430,7 +436,7 @@ export default function SettingsPage() {
       try {
         const parsed: unknown = JSON.parse(text);
         if (!Array.isArray(parsed)) {
-          throw new Error('导入文件必须是记忆数组');
+          throw new Error(t('sidepanel.settings.importMemoryArrayError'));
         }
         const memories = parsed.map((mem, index) => validateImportedMemory(mem, `memories[${index}]`));
         for (const memory of memories) {
@@ -438,14 +444,14 @@ export default function SettingsPage() {
         }
         setMemoryCount((c) => c + memories.length);
       } catch (error) {
-        alert(error instanceof Error ? error.message : 'JSON 格式错误');
+        alert(error instanceof Error ? error.message : t('sidepanel.settings.jsonFormatError'));
       }
     };
     input.click();
   };
 
   const handleClearAll = async () => {
-    if (!confirm('确定要清除所有记忆吗？此操作不可撤销。')) return;
+    if (!confirm(t('sidepanel.settings.clearAllConfirm'))) return;
     const memories: Memory[] = await chrome.runtime.sendMessage({ type: 'GET_MEMORIES' });
     for (const mem of memories) {
       await chrome.runtime.sendMessage({ type: 'DELETE_MEMORY', payload: { id: mem.id } });
@@ -454,8 +460,8 @@ export default function SettingsPage() {
   };
 
   const formatTime = (ts: number | null) => {
-    if (!ts) return '从未同步';
-    return new Date(ts).toLocaleString('zh-CN', {
+    if (!ts) return t('sidepanel.settings.neverSynced');
+    return new Date(ts).toLocaleString(locale, {
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
@@ -473,11 +479,11 @@ export default function SettingsPage() {
   };
 
   const petPositionItems: Array<{ key: PetPosition; label: string }> = [
-    { key: 'bottom-right', label: '右下' },
-    { key: 'bottom-left', label: '左下' },
+    { key: 'bottom-right', label: t('sidepanel.settings.positionBottomRight') },
+    { key: 'bottom-left', label: t('sidepanel.settings.positionBottomLeft') },
   ];
   if (petPosition === 'custom') {
-    petPositionItems.push({ key: 'custom', label: '自定义' });
+    petPositionItems.push({ key: 'custom', label: t('sidepanel.settings.positionCustom') });
   }
   const petPositionGridClass = `grid gap-2 ${petPosition === 'custom' ? 'grid-cols-3' : 'grid-cols-2'}`;
 
@@ -485,17 +491,17 @@ export default function SettingsPage() {
     <div className="p-4 space-y-5">
       <section className="space-y-3">
         <h2 className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>
-          模型设置
+          {t('sidepanel.settings.modelSection')}
         </h2>
 
         <div className="ds-surface-panel rounded-xl p-4 space-y-3">
           <div className="flex justify-between items-center">
             <div>
               <div className="text-xs font-medium" style={{ color: 'var(--ds-text)' }}>
-                Expert 模式
+                {t('sidepanel.settings.expertMode')}
               </div>
               <div className="text-[11px] mt-0.5" style={{ color: 'var(--ds-text-tertiary)' }}>
-                使用 DeepSeek Expert 模型进行对话
+                {t('sidepanel.settings.expertModeDescription')}
               </div>
             </div>
             <button
@@ -520,10 +526,10 @@ export default function SettingsPage() {
           >
             <div>
               <div className="text-xs font-medium" style={{ color: 'var(--ds-text)' }}>
-                侧边栏对话
+                {t('sidepanel.settings.sidepanelChat')}
               </div>
               <div className="text-[11px] mt-0.5" style={{ color: 'var(--ds-text-tertiary)' }}>
-                在侧边栏显示对话标签，支持网页登录或官方 API Key
+                {t('sidepanel.settings.sidepanelChatDescription')}
               </div>
             </div>
             <button
@@ -556,7 +562,7 @@ export default function SettingsPage() {
                   DeepSeek API Key
                 </div>
                 <div className="text-[11px] mt-0.5" style={{ color: 'var(--ds-text-tertiary)' }}>
-                  配置后右键场景可在普通网页使用
+                  {t('sidepanel.settings.apiKeyDescription')}
                 </div>
               </div>
               <span
@@ -566,7 +572,7 @@ export default function SettingsPage() {
                   background: apiKeyConfigured ? 'var(--ds-success-bg)' : 'var(--ds-surface)',
                 }}
               >
-                {apiKeyConfigured ? '已配置' : '未配置'}
+                {apiKeyConfigured ? t('sidepanel.settings.configured') : t('sidepanel.settings.notConfigured')}
               </span>
             </div>
 
@@ -576,7 +582,7 @@ export default function SettingsPage() {
                 value={apiKeyInput}
                 onChange={(e) => setApiKeyInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSaveApiKey()}
-                placeholder={apiKeyConfigured ? '输入新 Key 可替换' : 'sk-...'}
+                placeholder={apiKeyConfigured ? t('sidepanel.settings.apiKeyReplacePlaceholder') : 'sk-...'}
                 className={inputClass}
                 style={inputStyle}
               />
@@ -585,7 +591,7 @@ export default function SettingsPage() {
                 disabled={!apiKeyInput.trim() || apiKeyStatus === 'saving'}
                 className="ds-btn-secondary shrink-0 px-3 py-2 text-[11px] font-medium rounded-lg transition-all duration-150 disabled:opacity-40"
               >
-                {apiKeyStatus === 'saving' ? '保存中' : '保存'}
+                {apiKeyStatus === 'saving' ? t('sidepanel.settings.saving') : t('common.save')}
               </button>
             </div>
 
@@ -595,7 +601,7 @@ export default function SettingsPage() {
                 disabled={apiKeyStatus === 'clearing'}
                 className="ds-btn-secondary w-full py-2 text-[11px] font-medium rounded-lg transition-all duration-150 disabled:opacity-40"
               >
-                {apiKeyStatus === 'clearing' ? '清除中' : '清除 API Key'}
+                {apiKeyStatus === 'clearing' ? t('sidepanel.settings.clearing') : t('sidepanel.settings.clearApiKey')}
               </button>
             )}
 
@@ -618,10 +624,10 @@ export default function SettingsPage() {
           >
             <div>
               <div className="text-xs font-medium" style={{ color: 'var(--ds-text)' }}>
-                DeepSeek 小鲸鱼
+                {t('sidepanel.settings.petWhale')}
               </div>
               <div className="text-[11px] mt-0.5" style={{ color: 'var(--ds-text-tertiary)' }}>
-                在 DeepSeek 页面显示状态联动宠物
+                {t('sidepanel.settings.petWhaleDescription')}
               </div>
             </div>
             <button
@@ -644,17 +650,17 @@ export default function SettingsPage() {
 
       <section className="space-y-3">
         <h2 className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>
-          背景设置
+          {t('sidepanel.settings.backgroundSection')}
         </h2>
 
         <div className="ds-surface-panel rounded-xl p-4 space-y-3">
           <div className="flex justify-between items-center">
             <div>
               <div className="text-xs font-medium" style={{ color: 'var(--ds-text)' }}>
-                自定义背景
+                {t('sidepanel.settings.customBackground')}
               </div>
               <div className="text-[11px] mt-0.5" style={{ color: 'var(--ds-text-tertiary)' }}>
-                为 DeepSeek 页面设置背景图片
+                {t('sidepanel.settings.customBackgroundDescription')}
               </div>
             </div>
             <button
@@ -689,14 +695,14 @@ export default function SettingsPage() {
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d={SVG_PATHS.upload} />
               </svg>
-              上传图片
+              {t('sidepanel.settings.uploadImage')}
             </button>
           </div>
 
           <div className="flex gap-2">
             <input
               type="url"
-              placeholder="粘贴图片 URL"
+              placeholder={t('sidepanel.settings.imageUrlPlaceholder')}
               value={bgUrl}
               onChange={(e) => setBgUrl(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleUrlConfirm()}
@@ -708,7 +714,7 @@ export default function SettingsPage() {
               disabled={!bgUrl.trim()}
               className="ds-btn-secondary shrink-0 px-3 py-2 text-[11px] font-medium rounded-lg transition-all duration-150 disabled:opacity-40"
             >
-              确认
+              {t('common.confirm')}
             </button>
           </div>
 
@@ -719,7 +725,7 @@ export default function SettingsPage() {
             >
               <img
                 src={bgPreview}
-                alt="背景预览"
+                alt={t('sidepanel.settings.backgroundPreviewAlt')}
                 className="w-full h-full object-cover"
                 onError={() => { setBgUrl(''); setBgImageData(''); }}
               />
@@ -733,7 +739,7 @@ export default function SettingsPage() {
                   pointerEvents: 'none',
                 }}
               >
-                模拟效果预览
+                {t('sidepanel.settings.backgroundPreviewOverlay')}
               </div>
             </div>
           )}
@@ -741,7 +747,7 @@ export default function SettingsPage() {
           <div>
             <div className="flex justify-between items-center mb-1.5">
               <label className="text-[11px]" style={{ color: 'var(--ds-text-secondary)' }}>
-                背景透明度
+                {t('sidepanel.settings.backgroundOpacity')}
               </label>
               <span className="text-[11px] font-mono" style={{ color: 'var(--ds-text-tertiary)' }}>
                 {bgOpacity.toFixed(2)}
@@ -766,7 +772,7 @@ export default function SettingsPage() {
               onClick={handleClearBg}
               className="ds-btn-danger w-full py-2 text-[11px] font-medium rounded-lg transition-all duration-150"
             >
-              清除背景
+              {t('sidepanel.settings.clearBackground')}
             </button>
           )}
         </div>
@@ -778,7 +784,7 @@ export default function SettingsPage() {
 
       <section className="space-y-3">
         <h2 className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>
-          悬浮宠物
+          {t('sidepanel.settings.floatingPetSection')}
         </h2>
 
         <div className="ds-surface-panel rounded-xl p-4 space-y-3">
@@ -807,7 +813,7 @@ export default function SettingsPage() {
           <div>
             <div className="flex justify-between items-center mb-1.5">
               <label className="text-[11px]" style={{ color: 'var(--ds-text-secondary)' }}>
-                尺寸
+                {t('sidepanel.settings.size')}
               </label>
               <span className="text-[11px] font-mono" style={{ color: 'var(--ds-text-tertiary)' }}>
                 {petSize}px
@@ -830,7 +836,7 @@ export default function SettingsPage() {
           <div>
             <div className="flex justify-between items-center mb-1.5">
               <label className="text-[11px]" style={{ color: 'var(--ds-text-secondary)' }}>
-                透明度
+                {t('sidepanel.settings.opacity')}
               </label>
               <span className="text-[11px] font-mono" style={{ color: 'var(--ds-text-tertiary)' }}>
                 {petOpacity.toFixed(2)}
@@ -853,10 +859,10 @@ export default function SettingsPage() {
           <div className="flex justify-between items-center">
             <div>
               <div className="text-xs font-medium" style={{ color: 'var(--ds-text)' }}>
-                动态漂浮
+                {t('sidepanel.settings.petMotion')}
               </div>
               <div className="text-[11px] mt-0.5" style={{ color: 'var(--ds-text-tertiary)' }}>
-                减少动作时可关闭
+                {t('sidepanel.settings.petMotionDescription')}
               </div>
             </div>
             <button
@@ -879,13 +885,13 @@ export default function SettingsPage() {
 
       <section className="space-y-3">
         <h2 className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>
-          云同步
+          {t('sidepanel.settings.cloudSyncSection')}
         </h2>
 
         <div className="ds-surface-panel rounded-xl p-4 space-y-3">
           <div>
             <label className="block text-[11px] mb-1" style={{ color: 'var(--ds-text-secondary)' }}>
-              WebDAV 地址
+              {t('sidepanel.settings.webDavUrl')}
             </label>
             <input
               type="url"
@@ -900,7 +906,7 @@ export default function SettingsPage() {
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="block text-[11px] mb-1" style={{ color: 'var(--ds-text-secondary)' }}>
-                用户名
+                {t('sidepanel.settings.username')}
               </label>
               <input
                 type="text"
@@ -912,7 +918,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <label className="block text-[11px] mb-1" style={{ color: 'var(--ds-text-secondary)' }}>
-                密码
+                {t('sidepanel.settings.password')}
               </label>
               <input
                 type="password"
@@ -926,7 +932,7 @@ export default function SettingsPage() {
 
           <div>
             <label className="block text-[11px] mb-1" style={{ color: 'var(--ds-text-secondary)' }}>
-              远程路径
+              {t('sidepanel.settings.remotePath')}
             </label>
             <input
               type="text"
@@ -951,7 +957,7 @@ export default function SettingsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             )}
-            测试连接
+            {t('sidepanel.settings.testConnection')}
           </button>
           <button
             onClick={handleUploadLocal}
@@ -970,7 +976,7 @@ export default function SettingsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d={SVG_PATHS.upload} />
               </svg>
             )}
-            上传本地
+            {t('sidepanel.settings.uploadLocal')}
           </button>
           <button
             onClick={handleDownloadRemote}
@@ -984,7 +990,7 @@ export default function SettingsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d={SVG_PATHS.download} />
               </svg>
             )}
-            下载云端
+            {t('sidepanel.settings.downloadRemote')}
           </button>
         </div>
 
@@ -1001,18 +1007,18 @@ export default function SettingsPage() {
         )}
 
         <div className="text-[11px] text-center" style={{ color: 'var(--ds-text-tertiary)' }}>
-          上次同步: {formatTime(syncConfig.lastSyncAt)}
+          {t('sidepanel.settings.lastSync', { time: formatTime(syncConfig.lastSyncAt) })}
         </div>
       </section>
 
       <section className="space-y-3">
         <h2 className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>
-          数据管理
+          {t('sidepanel.settings.dataSection')}
         </h2>
 
         <div className="ds-surface-panel rounded-xl p-4">
           <div className="flex justify-between items-center text-sm">
-            <span style={{ color: 'var(--ds-text-secondary)' }}>记忆总数</span>
+            <span style={{ color: 'var(--ds-text-secondary)' }}>{t('sidepanel.settings.memoryTotal')}</span>
             <span className="text-lg font-semibold" style={{ color: 'var(--ds-blue)' }}>
               {memoryCount}
             </span>
@@ -1027,7 +1033,7 @@ export default function SettingsPage() {
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d={SVG_PATHS.download} />
             </svg>
-            导出记忆
+            {t('sidepanel.settings.exportMemories')}
           </button>
           <button
             onClick={handleImport}
@@ -1036,7 +1042,7 @@ export default function SettingsPage() {
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d={SVG_PATHS.upload} />
             </svg>
-            导入记忆
+            {t('sidepanel.settings.importMemories')}
           </button>
         </div>
 
@@ -1044,13 +1050,13 @@ export default function SettingsPage() {
           onClick={handleClearAll}
           className="ds-btn-danger w-full py-2.5 text-xs font-medium rounded-lg transition-all duration-150"
         >
-          清除所有记忆
+          {t('sidepanel.settings.clearAllMemories')}
         </button>
       </section>
 
       <section className="space-y-3">
         <h2 className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>
-          关于
+          {t('sidepanel.settings.aboutSection')}
         </h2>
         <div className="ds-surface-panel rounded-xl p-4 space-y-2">
           <div className="flex items-center gap-2.5">
@@ -1065,7 +1071,7 @@ export default function SettingsPage() {
                 DeepSeek++ v{version}
               </div>
               <div className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>
-                Agentic 记忆与 Skill 系统
+                {t('sidepanel.settings.aboutTagline')}
               </div>
             </div>
           </div>

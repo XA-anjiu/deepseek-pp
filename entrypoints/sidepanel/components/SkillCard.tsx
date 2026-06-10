@@ -1,5 +1,7 @@
+import type { LocaleMessageKey } from '../../../core/i18n';
 import type { Skill } from '../../../core/types';
 import { SVG_PATHS } from '../constants';
+import { useI18n } from '../i18n';
 
 interface Props {
   skill: Skill;
@@ -8,17 +10,21 @@ interface Props {
   onToggleEnabled?: () => void;
 }
 
-const SOURCE_LABELS: Record<string, { text: string; className: string }> = {
-  builtin: { text: '内置', className: 'ds-badge-info' },
-  official: { text: '官方', className: 'ds-badge-success' },
-  custom: { text: '自定义', className: 'ds-badge-warning' },
-  remote: { text: 'GitHub', className: 'ds-badge-info' },
+const SOURCE_LABELS: Record<string, { labelKey: LocaleMessageKey; className: string }> = {
+  builtin: { labelKey: 'sidepanel.skill.sources.builtin', className: 'ds-badge-info' },
+  official: { labelKey: 'sidepanel.skill.sources.official', className: 'ds-badge-success' },
+  custom: { labelKey: 'sidepanel.skill.sources.custom', className: 'ds-badge-warning' },
+  remote: { labelKey: 'sidepanel.skill.sources.remote', className: 'ds-badge-info' },
 };
 
 export default function SkillCard({ skill, onEdit, onDelete, onToggleEnabled }: Props) {
+  const { t } = useI18n();
   const badge = SOURCE_LABELS[skill.source];
   const enabled = skill.enabled !== false;
   const hasActions = Boolean(onEdit || onDelete || onToggleEnabled);
+  const toggleLabel = enabled
+    ? t('sidepanel.skill.actions.disableSkill', { name: skill.name })
+    : t('sidepanel.skill.actions.enableSkill', { name: skill.name });
 
   return (
     <div className="ds-card rounded-xl p-3.5 group" style={!enabled ? { opacity: 0.68 } : undefined}>
@@ -29,12 +35,12 @@ export default function SkillCard({ skill, onEdit, onDelete, onToggleEnabled }: 
           </code>
           {badge && (
             <span className={`${badge.className} inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full font-medium`}>
-              {badge.text}
+              {t(badge.labelKey)}
             </span>
           )}
           {!enabled && (
             <span className="ds-badge-warning inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full font-medium">
-              已停用
+              {t('sidepanel.skill.disabledBadge')}
             </span>
           )}
         </div>
@@ -43,8 +49,8 @@ export default function SkillCard({ skill, onEdit, onDelete, onToggleEnabled }: 
             {onToggleEnabled && (
               <button
                 type="button"
-                title={enabled ? '停用' : '启用'}
-                aria-label={`${enabled ? '停用' : '启用'} ${skill.name}`}
+                title={enabled ? t('common.deactivate') : t('common.enable')}
+                aria-label={toggleLabel}
                 onClick={onToggleEnabled}
                 className="ds-action-btn ds-action-btn-edit w-7 h-7 rounded-lg flex items-center justify-center"
               >
@@ -56,8 +62,8 @@ export default function SkillCard({ skill, onEdit, onDelete, onToggleEnabled }: 
             {onEdit && (
               <button
                 type="button"
-                title="编辑"
-                aria-label={`编辑 ${skill.name}`}
+                title={t('common.edit')}
+                aria-label={t('sidepanel.skill.actions.editSkill', { name: skill.name })}
                 onClick={onEdit}
                 className="ds-action-btn ds-action-btn-edit w-7 h-7 rounded-lg flex items-center justify-center"
               >
@@ -69,8 +75,8 @@ export default function SkillCard({ skill, onEdit, onDelete, onToggleEnabled }: 
             {onDelete && (
               <button
                 type="button"
-                title="删除"
-                aria-label={`删除 ${skill.name}`}
+                title={t('common.delete')}
+                aria-label={t('sidepanel.skill.actions.deleteSkill', { name: skill.name })}
                 onClick={onDelete}
                 className="ds-action-btn ds-action-btn-delete w-7 h-7 rounded-lg flex items-center justify-center"
               >
@@ -94,7 +100,7 @@ export default function SkillCard({ skill, onEdit, onDelete, onToggleEnabled }: 
             {skill.remote.path}
           </span>
           <span className="ds-tag px-1.5 py-0.5 rounded-full">
-            {skill.remote.licenseSpdxId ?? skill.remote.licenseName ?? 'Unknown license'}
+            {skill.remote.licenseSpdxId ?? skill.remote.licenseName ?? t('sidepanel.skill.unknownLicense')}
           </span>
           {skill.remote.upstreamVersion && (
             <span className="ds-tag px-1.5 py-0.5 rounded-full">
@@ -108,7 +114,7 @@ export default function SkillCard({ skill, onEdit, onDelete, onToggleEnabled }: 
           <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d={SVG_PATHS.chip} />
           </svg>
-          含记忆注入
+          {t('sidepanel.skill.memoryEnabledBadge')}
         </span>
       )}
     </div>

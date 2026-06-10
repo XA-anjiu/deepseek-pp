@@ -3,16 +3,27 @@ export interface SkillPopupItem {
   description: string;
 }
 
+export interface SkillPopupCopy {
+  hint: string;
+}
+
+const DEFAULT_COPY: SkillPopupCopy = {
+  hint: '↑↓ Navigate · Enter Select · Esc Close',
+};
+
 let popupEl: HTMLElement | null = null;
 let skills: SkillPopupItem[] = [];
 let filtered: SkillPopupItem[] = [];
 let activeIdx = 0;
 let textarea: HTMLTextAreaElement | null = null;
+let copy: SkillPopupCopy = DEFAULT_COPY;
 
 let initialized = false;
 
-export function initSkillPopup(initialSkills: SkillPopupItem[]) {
+export function initSkillPopup(initialSkills: SkillPopupItem[], nextCopy: Partial<SkillPopupCopy> = {}) {
   skills = initialSkills;
+  copy = { ...DEFAULT_COPY, ...nextCopy };
+  if (isVisible()) buildItems();
   if (initialized) return;
   initialized = true;
   injectStyles();
@@ -150,7 +161,7 @@ function buildItems() {
       <div class="dpp-skill-desc">${escapeHtml(s.description)}</div>
     </div>
   `).join('')
-    + '<div class="dpp-skill-hint">↑↓ 导航 · Enter 选择 · Esc 关闭</div>';
+    + `<div class="dpp-skill-hint">${escapeHtml(copy.hint)}</div>`;
 
   popupEl.querySelectorAll('.dpp-skill-item').forEach(el => {
     const i = parseInt((el as HTMLElement).dataset.i || '0');

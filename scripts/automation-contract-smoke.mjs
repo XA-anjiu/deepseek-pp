@@ -43,7 +43,7 @@ for (const removed of removedPaths) {
   }
 }
 
-assertContains('entrypoints/sidepanel/App.tsx', "label: '自动化'");
+assertContains('entrypoints/sidepanel/App.tsx', "labelKey: 'app.tabs.automation'");
 assertContains('entrypoints/sidepanel/App.tsx', "import('./pages/AutomationPage')");
 assertContains('entrypoints/sidepanel/pages/AutomationPage.tsx', 'export default function AutomationPage');
 assertContains('core/automation/runner.ts', 'runDeepSeekAutomation');

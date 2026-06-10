@@ -13,6 +13,7 @@ import {
   type ModelTurn,
 } from '../deepseek/adapter';
 import { extractToolCalls } from '../interceptor/tool-parser';
+import { DEFAULT_LOCALE, translate, type SupportedLocale } from '../i18n';
 import { buildPromptAugmentation } from '../prompt';
 import { DEFAULT_TOOL_DESCRIPTORS } from '../tool';
 import { clampText, createToolExecutionRecord, runToolContinuationLoop } from '../tool-loop/engine';
@@ -38,6 +39,7 @@ export async function runDeepSeekAutomation(
 ): Promise<AutomationRunnerResult> {
   let chatSessionId = request.chatSessionId;
   let parentMessageId: number | null = null;
+  const locale = request.locale ?? DEFAULT_LOCALE;
 
   try {
     parentMessageId = normalizeMessageId(request.parentMessageId, 'parent_message_id');
@@ -49,6 +51,7 @@ export async function runDeepSeekAutomation(
       presetContent: request.promptContext?.presetContent ?? null,
       thinkingEnabled: request.promptOptions.thinkingEnabled,
       toolDescriptors: request.promptContext?.toolDescriptors ?? DEFAULT_TOOL_DESCRIPTORS,
+      locale,
     });
     let stream = await submitAutomationPrompt(
       request,
@@ -77,6 +80,7 @@ export async function runDeepSeekAutomation(
       stream.assistantText,
       clientHeaders,
       headers,
+      locale,
     );
     stream = toolLoop.stream;
 
@@ -149,6 +153,7 @@ async function runAutomationToolLoop(
   assistantText: string,
   clientHeaders: Record<string, string>,
   powHeaders: Record<string, string>,
+  locale: SupportedLocale,
 ): Promise<{ stream: ModelTurn; executions: ToolExecutionRecord[] }> {
   const initialTurn: ModelTurn = {
     assistantText,
@@ -183,7 +188,7 @@ async function runAutomationToolLoop(
         outputMaxLength: 8000,
       });
     },
-    buildContinuationPrompt: buildAutomationToolContinuationPrompt,
+    buildContinuationPrompt: (executions) => buildAutomationToolContinuationPrompt(executions, locale),
     submitContinuation: (prompt, parentMessageId) => submitAutomationPrompt(
       request,
       chatSessionId,
@@ -197,7 +202,10 @@ async function runAutomationToolLoop(
   return { stream: loop.turn, executions: loop.executions };
 }
 
-function buildAutomationToolContinuationPrompt(executions: ToolExecutionRecord[]): string {
+export function buildAutomationToolContinuationPrompt(
+  executions: ToolExecutionRecord[],
+  locale: SupportedLocale = DEFAULT_LOCALE,
+): string {
   const results = executions.map((execution) => ({
     tool: execution.name,
     provider: execution.provider?.displayName,
@@ -212,8 +220,8 @@ function buildAutomationToolContinuationPrompt(executions: ToolExecutionRecord[]
   }));
 
   return [
-    '以下是自动化任务刚刚执行的 MCP 工具结果。请基于这些结果继续完成自动化任务。',
-    '如果结果已经足够，请输出最终结论；只有确实需要更多信息时才继续调用工具。',
+    translate(locale, 'prompt.automation.continuationIntro'),
+    translate(locale, 'prompt.automation.continuationEnough'),
     '',
     '<tool_results>',
     JSON.stringify(results, null, 2),

@@ -1,11 +1,18 @@
-import { MEMORY_TOOL_DESCRIPTORS } from './memory';
-import { WEB_SEARCH_TOOL_DESCRIPTORS } from './web-search';
+import { DEFAULT_LOCALE, type SupportedLocale } from '../i18n';
+import { createMemoryToolDescriptors } from './memory';
+import { createWebSearchToolDescriptors } from './web-search';
 import type { ToolCall, ToolDescriptor, ToolError, ToolPayload } from './types';
 
-export const DEFAULT_TOOL_DESCRIPTORS: readonly ToolDescriptor[] = [
-  ...MEMORY_TOOL_DESCRIPTORS,
-  ...WEB_SEARCH_TOOL_DESCRIPTORS,
-];
+export function createDefaultToolDescriptors(
+  locale: SupportedLocale = DEFAULT_LOCALE,
+): readonly ToolDescriptor[] {
+  return [
+    ...createMemoryToolDescriptors(locale),
+    ...createWebSearchToolDescriptors(locale),
+  ];
+}
+
+export const DEFAULT_TOOL_DESCRIPTORS: readonly ToolDescriptor[] = createDefaultToolDescriptors(DEFAULT_LOCALE);
 
 export interface ToolInvocationCatalog {
   descriptors: readonly ToolDescriptor[];

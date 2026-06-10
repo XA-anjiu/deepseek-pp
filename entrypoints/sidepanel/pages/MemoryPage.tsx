@@ -3,13 +3,10 @@ import type { Memory, MemoryType, NewMemory } from '../../../core/types';
 import MemoryCard from '../components/MemoryCard';
 import MemoryForm from '../components/MemoryForm';
 import { MEMORY_TYPE_CONFIG } from '../constants';
-
-const FILTER_TYPES: { key: MemoryType | 'all'; label: string }[] = [
-  { key: 'all', label: '全部' },
-  ...MEMORY_TYPE_CONFIG.map((t) => ({ key: t.key, label: t.label })),
-];
+import { useI18n } from '../i18n';
 
 export default function MemoryPage() {
+  const { t } = useI18n();
   const [memories, setMemories] = useState<Memory[]>([]);
   const [filter, setFilter] = useState<MemoryType | 'all'>('all');
   const [showForm, setShowForm] = useState(false);
@@ -44,6 +41,13 @@ export default function MemoryPage() {
   }, []);
 
   const filtered = filter === 'all' ? memories : memories.filter((m) => m.type === filter);
+  const filterTypes = [
+    { key: 'all' as const, label: t('common.all') },
+    ...MEMORY_TYPE_CONFIG.map((typeConfig) => ({
+      key: typeConfig.key,
+      label: t(typeConfig.labelKey),
+    })),
+  ];
 
   const handleDelete = async (id: number) => {
     await chrome.runtime.sendMessage({ type: 'DELETE_MEMORY', payload: { id } });
@@ -81,7 +85,7 @@ export default function MemoryPage() {
     <div className="p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex gap-1.5 flex-wrap">
-          {FILTER_TYPES.map((t) => (
+          {filterTypes.map((t) => (
             <button
               key={t.key}
               onClick={() => setFilter(t.key)}
@@ -104,7 +108,7 @@ export default function MemoryPage() {
           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
-          新增
+          {t('common.add')}
         </button>
       </div>
 
@@ -124,7 +128,7 @@ export default function MemoryPage() {
             🧠
           </div>
           <p className="text-sm" style={{ color: 'var(--ds-text-tertiary)' }}>
-            {memories.length === 0 ? '暂无记忆，对话时会自动积累' : '该分类下暂无记忆'}
+            {memories.length === 0 ? t('sidepanel.memoryPage.emptyAll') : t('sidepanel.memoryPage.emptyFiltered')}
           </p>
         </div>
       ) : (
@@ -142,7 +146,7 @@ export default function MemoryPage() {
       )}
 
       <div className="text-[11px] text-center pt-1" style={{ color: 'var(--ds-text-tertiary)' }}>
-        共 {memories.length} 条记忆
+        {t('sidepanel.memoryPage.count', { count: memories.length })}
       </div>
     </div>
   );

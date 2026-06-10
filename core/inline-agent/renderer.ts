@@ -1,5 +1,13 @@
 const AGENT_STEP_STYLE_ID = 'dpp-inline-agent-css';
 
+export interface InlineAgentRendererLabels {
+  step: (stepNumber: number) => string;
+  streaming: string;
+  stop: string;
+  footerComplete: (totalSteps: number, totalTools: number) => string;
+  footerError: (totalSteps: number, totalTools: number) => string;
+}
+
 export function injectInlineAgentStyles(): void {
   if (document.getElementById(AGENT_STEP_STYLE_ID)) return;
 
@@ -178,7 +186,11 @@ export function createAgentContainer(): HTMLElement {
   return container;
 }
 
-export function createAgentStepElement(stepIndex: number, onStop?: () => void): HTMLElement {
+export function createAgentStepElement(
+  stepIndex: number,
+  onStop?: () => void,
+  labels?: Partial<InlineAgentRendererLabels>,
+): HTMLElement {
   const step = document.createElement('div');
   step.className = 'dpp-agent-step';
   step.setAttribute('data-step-index', String(stepIndex));
@@ -193,11 +205,11 @@ export function createAgentStepElement(stepIndex: number, onStop?: () => void): 
 
   const indicator = document.createElement('span');
   indicator.className = 'dpp-agent-step-indicator';
-  indicator.textContent = `Step ${stepIndex + 1}`;
+  indicator.textContent = labels?.step?.(stepIndex + 1) ?? `Step ${stepIndex + 1}`;
 
   const status = document.createElement('span');
   status.className = 'dpp-agent-step-status';
-  status.textContent = 'streaming...';
+  status.textContent = labels?.streaming ?? 'streaming...';
 
   header.appendChild(indicator);
   header.appendChild(status);
@@ -205,7 +217,7 @@ export function createAgentStepElement(stepIndex: number, onStop?: () => void): 
   if (onStop) {
     const stopBtn = document.createElement('button');
     stopBtn.className = 'dpp-agent-stop-btn';
-    stopBtn.textContent = 'Stop';
+    stopBtn.textContent = labels?.stop ?? 'Stop';
     stopBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       onStop();
@@ -261,15 +273,18 @@ export function createAgentFooter(
   totalTools: number,
   isError: boolean,
   labelOverride?: string,
+  labels?: Partial<InlineAgentRendererLabels>,
 ): HTMLElement {
   const footer = document.createElement('div');
   footer.className = `dpp-agent-footer ${isError ? 'error' : 'complete'}`;
   if (labelOverride) {
     footer.textContent = labelOverride;
   } else if (isError) {
-    footer.textContent = `Agent 执行出错（${totalSteps} 步，${totalTools} 次工具调用）`;
+    footer.textContent = labels?.footerError?.(totalSteps, totalTools) ??
+      `Agent error (${totalSteps} steps, ${totalTools} tool calls)`;
   } else {
-    footer.textContent = `Agent 完成（${totalSteps} 步，${totalTools} 次工具调用）`;
+    footer.textContent = labels?.footerComplete?.(totalSteps, totalTools) ??
+      `Agent complete (${totalSteps} steps, ${totalTools} tool calls)`;
   }
   return footer;
 }

@@ -1,6 +1,6 @@
 # Chrome Web Store Submission Runbook
 
-Last updated: 2026-06-06
+Last updated: 2026-06-10
 
 This runbook covers the parts that can be prepared from the repository and the parts that must be confirmed in the Chrome Web Store Developer Dashboard.
 
@@ -14,7 +14,7 @@ Official references:
 
 ## Current Status
 
-- Chrome MV3 package exists at `dist/deepseek-plus-plus-0.5.1-chrome.zip`.
+- Chrome MV3 package exists at `dist/deepseek-plus-plus-0.6.4-chrome.zip`.
 - Package root contains `manifest.json`.
 - Package size is below the Chrome Web Store package limit.
 - Required icon exists at `public/icon/128.png`.
@@ -47,7 +47,7 @@ npm run zip:chrome
 Upload:
 
 ```text
-dist/deepseek-plus-plus-0.5.1-chrome.zip
+dist/deepseek-plus-plus-0.6.4-chrome.zip
 ```
 
 ## Store Listing Fields
@@ -72,7 +72,7 @@ Productivity
 ### Single Purpose
 
 ```text
-Enhance the DeepSeek web chat experience with user-controlled memory, skills, prompt presets, MCP tool execution, local conversation export, and scheduled automation inside chat.deepseek.com.
+Enhance the DeepSeek web chat experience with English and Simplified Chinese UI, user-controlled memory, Skills, prompt presets, MCP tool execution, local conversation export, and scheduled automation inside chat.deepseek.com.
 ```
 
 ### Data Type Disclosures
@@ -161,10 +161,11 @@ Use this reviewer note:
 1. Install the extension and open https://chat.deepseek.com/.
 2. Sign in to DeepSeek if prompted.
 3. Click the extension action to open the side panel.
-4. Create a memory or skill in the side panel.
-5. Send a DeepSeek message that uses the saved memory/skill. The extension should inject selected context and render tool execution results inline.
-6. In a DeepSeek conversation, use the DeepSeek++ export button next to the official reply actions such as copy and share. The extension should show format choices, default to HTML, and save the selected current-conversation export formats locally.
-7. Optional MCP/WebDAV/native messaging features require user-provided endpoints or a user-installed local Shell host and are disabled until configured by the user.
+4. Open Settings and switch Language between English and Simplified Chinese; the side-panel labels and built-in tool guidance should update.
+5. Create a memory or Skill in the side panel.
+6. Send a DeepSeek message that uses the saved memory/Skill. The extension should use the selected language for extension UI while preserving the user-authored memory/Skill text.
+7. In a DeepSeek conversation, use the DeepSeek++ export button next to the official reply actions such as copy and share. The extension should show format choices, default to HTML, and save the selected current-conversation export formats locally.
+8. Optional MCP/WebDAV/native messaging features require user-provided endpoints or a user-installed local Shell host and are disabled until configured by the user.
 ```
 
 No test account is included because the extension works with the reviewer's own DeepSeek session.

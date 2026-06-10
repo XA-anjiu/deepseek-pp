@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { SHELL_MCP_NATIVE_HOST, SHELL_MCP_SERVER_NAME, createShellMcpPresetInput } from '../../../core/shell';
+import type { LocaleMessageKey } from '../../../core/i18n';
 import type { McpServerConfig, McpToolAllowlist, McpToolCacheEntry, ToolDescriptor } from '../../../core/types';
+import { useI18n } from '../i18n';
 
 type PermissionState = 'idle' | 'granting' | 'granted' | 'denied' | 'error';
 type DiagState = 'idle' | 'running' | 'done' | 'err';
@@ -8,7 +10,8 @@ type DiagResult = Record<string, { status: number; length: number; error?: strin
 type PythonBusyState = 'idle' | 'creating' | 'refreshing' | 'toggling';
 
 function DiagSearch() {
-  const [query, setQuery] = useState('橘鸦 up主');
+  const { t } = useI18n();
+  const [query, setQuery] = useState(t('sidepanel.toolsPage.diagnosticsDefaultQuery'));
   const [state, setState] = useState<DiagState>('idle');
   const [result, setResult] = useState<DiagResult | null>(null);
 
@@ -46,7 +49,7 @@ function DiagSearch() {
           disabled={state === 'running' || !query.trim()}
           className="ds-btn-secondary shrink-0 px-3 py-2 text-[11px] font-medium rounded-lg disabled:opacity-40"
         >
-          {state === 'running' ? '诊断中...' : '诊断'}
+          {state === 'running' ? t('sidepanel.toolsPage.diagnosticsRunning') : t('sidepanel.toolsPage.diagnosticsRun')}
         </button>
       </div>
       {result && (
@@ -57,8 +60,8 @@ function DiagSearch() {
             }}>
               <div style={{ fontWeight: 600, color: 'var(--ds-text)' }}>{domain}</div>
               <div style={{ color: 'var(--ds-text-secondary)' }}>
-                HTTP {info.status} · {info.length} 字节
-                {info.error && <span style={{ color: 'var(--ds-danger)' }}> · 错误: {info.error}</span>}
+                HTTP {info.status} · {t('sidepanel.toolsPage.bytes', { count: info.length })}
+                {info.error && <span style={{ color: 'var(--ds-danger)' }}> · {t('sidepanel.toolsPage.errorPrefix', { error: info.error })}</span>}
               </div>
               {info.preview && (
                 <div className="mt-1 p-2 rounded text-[10px] leading-relaxed" style={{
@@ -78,17 +81,22 @@ function DiagSearch() {
 const TOOLS = [
   {
     key: 'web_search',
-    name: '搜索互联网 (web_search)',
-    description: '在 Bing 搜索关键词，返回标题、URL 和摘要',
+    nameKey: 'sidepanel.toolsPage.webSearchName',
+    descriptionKey: 'sidepanel.toolsPage.webSearchDescription',
     icon: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z',
   },
   {
     key: 'web_fetch',
-    name: '获取网页 (web_fetch)',
-    description: '下载指定 URL 并提取可视文本内容',
+    nameKey: 'sidepanel.toolsPage.webFetchName',
+    descriptionKey: 'sidepanel.toolsPage.webFetchDescription',
     icon: 'M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
   },
-] as const;
+] as const satisfies readonly {
+  key: string;
+  nameKey: LocaleMessageKey;
+  descriptionKey: LocaleMessageKey;
+  icon: string;
+}[];
 
 type ToolKey = typeof TOOLS[number]['key'];
 
@@ -109,18 +117,19 @@ function PythonToolCard({
   onRefresh: () => void;
   onToggle: () => void;
 }) {
+  const { t } = useI18n();
   const pythonStatus = cache?.descriptors.find((tool) => tool.name === 'python_status') ?? null;
   const pythonExec = cache?.descriptors.find((tool) => tool.name === 'python_exec') ?? null;
   const enabled = Boolean(server && pythonExec && isMcpToolEnabled(server, pythonExec));
   const hasShell = Boolean(server);
   const canToggle = Boolean(server && pythonExec && busy === 'idle');
   const statusText = !server
-    ? '未创建 Shell Native Host'
+    ? t('sidepanel.toolsPage.pythonStatusNoShell')
     : !cache
-      ? '尚未刷新工具'
+      ? t('sidepanel.toolsPage.pythonStatusNoCache')
       : pythonExec
-        ? enabled ? '已开启' : '已发现，未开启'
-        : '未发现 python_exec';
+        ? enabled ? t('sidepanel.toolsPage.pythonStatusEnabled') : t('sidepanel.toolsPage.pythonStatusDiscovered')
+        : t('sidepanel.toolsPage.pythonStatusMissing');
 
   return (
     <div className="ds-surface-panel rounded-xl p-4 flex items-start gap-3">
@@ -139,7 +148,7 @@ function PythonToolCard({
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <div className="text-xs font-medium truncate" style={{ color: 'var(--ds-text)' }}>
-              Python 解释器 (python_exec)
+              {t('sidepanel.toolsPage.pythonTitle')}
             </div>
             <div className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--ds-text-tertiary)' }}>
               {statusText}
@@ -163,7 +172,7 @@ function PythonToolCard({
         </div>
 
         <div className="text-[11px] mt-1 leading-relaxed" style={{ color: 'var(--ds-text-secondary)' }}>
-          用本机 Python 执行短代码，适合快速验证想法、复杂计算和小型数据处理。
+          {t('sidepanel.toolsPage.pythonDescription')}
         </div>
 
         <div className="flex flex-wrap gap-1.5 mt-2">
@@ -173,7 +182,7 @@ function PythonToolCard({
               disabled={busy !== 'idle'}
               className="ds-btn-secondary px-2 py-1 text-[11px] rounded-md disabled:opacity-50"
             >
-              {busy === 'creating' ? '创建中' : '创建 Shell'}
+              {busy === 'creating' ? t('sidepanel.toolsPage.pythonCreating') : t('sidepanel.toolsPage.pythonCreate')}
             </button>
           )}
           {hasShell && (
@@ -182,12 +191,12 @@ function PythonToolCard({
               disabled={busy !== 'idle'}
               className="ds-btn-secondary px-2 py-1 text-[11px] rounded-md disabled:opacity-50"
             >
-              {busy === 'refreshing' ? '刷新中' : '刷新工具'}
+              {busy === 'refreshing' ? t('sidepanel.toolsPage.pythonRefreshing') : t('sidepanel.toolsPage.pythonRefresh')}
             </button>
           )}
           {pythonStatus && (
             <span className="px-2 py-1 text-[10px] rounded-md" style={{ color: 'var(--ds-success)', background: 'var(--ds-success-bg)' }}>
-              python_status 可用
+              {t('sidepanel.toolsPage.pythonStatusAvailable')}
             </span>
           )}
         </div>
@@ -199,7 +208,7 @@ function PythonToolCard({
         )}
         {server && cache && !pythonExec && (
           <div className="text-[11px] mt-2 px-2 py-1.5 rounded-lg" style={{ color: 'var(--ds-danger)', background: 'var(--ds-danger-bg)' }}>
-            当前 Shell Native Host 版本没有返回 python_exec。重装 Shell Native Host 并重启浏览器后再刷新。
+            {t('sidepanel.toolsPage.pythonMissingDetail')}
           </div>
         )}
       </div>
@@ -208,6 +217,7 @@ function PythonToolCard({
 }
 
 export default function ToolsPage() {
+  const { t } = useI18n();
   const [settings, setSettings] = useState<Record<ToolKey, boolean>>({
     web_search: true,
     web_fetch: true,
@@ -263,14 +273,14 @@ export default function ToolsPage() {
     try {
       const existing = pythonServer;
       if (existing) {
-        setPythonMessage('Shell MCP 已存在，请刷新工具或重装 Native Host。');
+        setPythonMessage(t('sidepanel.toolsPage.shellExists'));
         return;
       }
       await chrome.runtime.sendMessage({
         type: 'CREATE_MCP_SERVER',
         payload: createShellMcpPresetInput(),
       });
-      setPythonMessage('已创建 Shell MCP。安装或重装 Shell Native Host 后点击刷新工具。');
+      setPythonMessage(t('sidepanel.toolsPage.shellCreated'));
       await loadPythonTool();
     } finally {
       setPythonBusy('idle');
@@ -289,9 +299,9 @@ export default function ToolsPage() {
       const cache: McpToolCacheEntry | null = result?.cache ?? result ?? null;
       setPythonCache(cache);
       if (cache?.descriptors.some((tool) => tool.name === 'python_exec')) {
-        setPythonMessage('已发现 Python 解释器工具。');
+        setPythonMessage(t('sidepanel.toolsPage.pythonFound'));
       } else {
-        setPythonMessage('未发现 python_exec。请重装 Shell Native Host 后重启浏览器，再刷新工具。');
+        setPythonMessage(t('sidepanel.toolsPage.pythonMissingAfterRefresh'));
       }
       await loadPythonTool();
     } finally {
@@ -303,7 +313,7 @@ export default function ToolsPage() {
     if (!pythonServer) return;
     const pythonExec = pythonCache?.descriptors.find((tool) => tool.name === 'python_exec');
     if (!pythonExec) {
-      setPythonMessage('未发现 python_exec。请先刷新工具，必要时重装 Shell Native Host。');
+      setPythonMessage(t('sidepanel.toolsPage.pythonMissingBeforeToggle'));
       return;
     }
 
@@ -326,7 +336,7 @@ export default function ToolsPage() {
           },
         },
       });
-      setPythonMessage(shouldEnable ? 'Python 解释器已开启。' : 'Python 解释器已关闭。');
+      setPythonMessage(shouldEnable ? t('sidepanel.toolsPage.pythonEnabled') : t('sidepanel.toolsPage.pythonDisabled'));
       await loadPythonTool();
     } finally {
       setPythonBusy('idle');
@@ -376,10 +386,10 @@ export default function ToolsPage() {
     <div className="p-4 space-y-4">
       <div className="space-y-1">
         <h2 className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>
-          工具开关
+          {t('sidepanel.toolsPage.toolTitle')}
         </h2>
         <p className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>
-          关闭后该工具不会注入到对话中，AI 将无法调用
+          {t('sidepanel.toolsPage.toolDescription')}
         </p>
       </div>
 
@@ -406,7 +416,7 @@ export default function ToolsPage() {
                   className="text-xs font-medium truncate"
                   style={{ color: 'var(--ds-text)' }}
                 >
-                  {tool.name}
+                  {t(tool.nameKey)}
                 </div>
                 <button
                   onClick={() => handleToggle(tool.key, !settings[tool.key])}
@@ -427,7 +437,7 @@ export default function ToolsPage() {
                 className="text-[11px] mt-1 leading-relaxed"
                 style={{ color: 'var(--ds-text-secondary)' }}
               >
-                {tool.description}
+                {t(tool.descriptionKey)}
               </div>
             </div>
           </div>
@@ -450,26 +460,25 @@ export default function ToolsPage() {
           background: 'var(--ds-surface)',
         }}
       >
-        关闭工具后，新对话将不再包含该工具的调用格式。已开启的对话不受影响。
+        {t('sidepanel.toolsPage.disabledNotice')}
       </div>
 
-      {/* ---- 测试搜索 ---- */}
       <section className="space-y-2">
         <h2 className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>
-          诊断搜索
+          {t('sidepanel.toolsPage.diagnosticTitle')}
         </h2>
         <p className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>
-          直接测试搜索是否可用，绕过 AI 对话链路
+          {t('sidepanel.toolsPage.diagnosticDescription')}
         </p>
         <DiagSearch />
       </section>
 
       <section className="space-y-2">
         <h2 className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>
-          web_fetch 权限
+          {t('sidepanel.toolsPage.permissionTitle')}
         </h2>
         <p className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>
-          获取网页需要访问对应站点的权限。在此输入网址并授予权限。
+          {t('sidepanel.toolsPage.permissionDescription')}
         </p>
         <div className="flex gap-2">
           <input
@@ -493,7 +502,7 @@ export default function ToolsPage() {
             {permState === 'granting' ? (
               <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
             ) : null}
-            授权
+            {t('sidepanel.toolsPage.grantPermission')}
           </button>
         </div>
         {permState === 'granted' && (
@@ -501,7 +510,7 @@ export default function ToolsPage() {
             className="text-[11px] px-3 py-2 rounded-lg"
             style={{ color: 'var(--ds-success)', background: 'var(--ds-success-bg)' }}
           >
-            权限已授予，可以访问该站点
+            {t('sidepanel.toolsPage.permissionGranted')}
           </div>
         )}
         {permState === 'denied' && (
@@ -509,7 +518,7 @@ export default function ToolsPage() {
             className="text-[11px] px-3 py-2 rounded-lg"
             style={{ color: 'var(--ds-danger)', background: 'var(--ds-danger-bg)' }}
           >
-            权限被拒绝，请重试或前往 chrome://extensions 手动添加
+            {t('sidepanel.toolsPage.permissionDenied')}
           </div>
         )}
         {permState === 'error' && (
@@ -517,7 +526,7 @@ export default function ToolsPage() {
             className="text-[11px] px-3 py-2 rounded-lg"
             style={{ color: 'var(--ds-danger)', background: 'var(--ds-danger-bg)' }}
           >
-            网址格式不正确，请输入完整 URL（如 https://example.com）
+            {t('sidepanel.toolsPage.permissionInvalidUrl')}
           </div>
         )}
 
@@ -544,13 +553,13 @@ export default function ToolsPage() {
               </svg>
             )}
             {allSitesState === 'granting'
-              ? '请求中...'
+              ? t('sidepanel.toolsPage.allSitesRequesting')
               : allSitesState === 'granted'
-                ? '已授权全部网站'
-                : '授权全部网站'}
+                ? t('sidepanel.toolsPage.allSitesGranted')
+                : t('sidepanel.toolsPage.allSitesGrant')}
           </button>
           <p className="text-[10px] mt-1.5 text-center" style={{ color: 'var(--ds-text-tertiary)' }}>
-            一键授予扩展访问所有网站的权限，此后 web_fetch 获取任意页面不再弹窗
+            {t('sidepanel.toolsPage.allSitesHelp')}
           </p>
         </div>
       </section>

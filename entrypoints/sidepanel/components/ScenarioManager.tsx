@@ -6,8 +6,10 @@ import {
   deleteScenario,
   addCustomScenario,
 } from '../../../core/scenario/store';
+import { useI18n } from '../i18n';
 
 export default function ScenarioManager() {
+  const { t } = useI18n();
   const [scenarios, setScenarios] = useState<ScenarioConfig[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTemplate, setEditTemplate] = useState('');
@@ -56,10 +58,10 @@ export default function ScenarioManager() {
   return (
     <div>
       <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--ds-text)' }}>
-        右键场景
+        {t('sidepanel.scenario.title')}
       </h3>
       <p className="text-xs mb-3" style={{ color: 'var(--ds-text-tertiary)' }}>
-        选中文本后右键可发送到侧边栏对话
+        {t('sidepanel.scenario.description')}
       </p>
 
       {scenarios.filter((s) => s.builtIn).map((s) => (
@@ -77,16 +79,16 @@ export default function ScenarioManager() {
                 className="text-xs px-2 py-1 rounded w-48"
                 style={{ background: 'var(--ds-surface)', color: 'var(--ds-text)', border: '1px solid var(--ds-border)' }}
               />
-              <button onClick={() => saveTemplate(s)} className="text-xs px-2 py-1 rounded" style={{ background: 'var(--ds-accent)', color: '#fff' }}>保存</button>
+              <button onClick={() => saveTemplate(s)} className="text-xs px-2 py-1 rounded" style={{ background: 'var(--ds-accent)', color: '#fff' }}>{t('common.save')}</button>
             </div>
           ) : (
-            <button onClick={() => startEdit(s)} className="text-xs" style={{ color: 'var(--ds-text-tertiary)' }}>编辑</button>
+            <button onClick={() => startEdit(s)} className="text-xs" style={{ color: 'var(--ds-text-tertiary)' }}>{t('common.edit')}</button>
           )}
         </div>
       ))}
 
       <div className="mt-4 pt-3" style={{ borderTop: '1px solid var(--ds-border)' }}>
-        <span className="text-xs font-medium" style={{ color: 'var(--ds-text-secondary)' }}>自定义场景</span>
+        <span className="text-xs font-medium" style={{ color: 'var(--ds-text-secondary)' }}>{t('sidepanel.scenario.customTitle')}</span>
         {scenarios.filter((s) => !s.builtIn).map((s) => (
           <div key={s.id} className="flex items-center gap-2 py-1.5">
             <label className="switch">
@@ -94,25 +96,25 @@ export default function ScenarioManager() {
               <span className="slider" />
             </label>
             <span className="text-sm flex-1" style={{ color: 'var(--ds-text)' }}>{s.label}</span>
-            <button onClick={() => handleDelete(s.id)} className="text-xs text-red-400">删除</button>
+            <button onClick={() => handleDelete(s.id)} className="text-xs text-red-400">{t('common.delete')}</button>
           </div>
         ))}
         <div className="flex gap-1 mt-2">
           <input
             value={newLabel}
             onChange={(e) => setNewLabel(e.target.value)}
-            placeholder="场景名称"
+            placeholder={t('sidepanel.scenario.namePlaceholder')}
             className="text-xs px-2 py-1 rounded flex-1"
             style={{ background: 'var(--ds-surface)', color: 'var(--ds-text)', border: '1px solid var(--ds-border)' }}
           />
           <input
             value={newTemplate}
             onChange={(e) => setNewTemplate(e.target.value)}
-            placeholder="Prompt 模板（含 {text}）"
+            placeholder={t('sidepanel.scenario.templatePlaceholder')}
             className="text-xs px-2 py-1 rounded flex-[2]"
             style={{ background: 'var(--ds-surface)', color: 'var(--ds-text)', border: '1px solid var(--ds-border)' }}
           />
-          <button onClick={handleAdd} className="text-xs px-2 py-1 rounded" style={{ background: 'var(--ds-accent)', color: '#fff' }}>添加</button>
+          <button onClick={handleAdd} className="text-xs px-2 py-1 rounded" style={{ background: 'var(--ds-accent)', color: '#fff' }}>{t('common.add')}</button>
         </div>
       </div>
     </div>

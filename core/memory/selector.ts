@@ -1,5 +1,6 @@
 import type { Memory } from '../types';
 import { MEMORY_TOKEN_BUDGET, STOP_WORDS } from '../constants';
+import { DEFAULT_LOCALE, translate, type SupportedLocale } from '../i18n';
 import { estimateTokens } from '../token/estimator';
 
 export { estimateTokens } from '../token/estimator';
@@ -129,7 +130,10 @@ export function formatMemoryLine(m: Memory): string {
   return `- ${idPrefix}[${m.type}] ${sanitizeContent(m.name)}: ${sanitizeContent(m.content)}`;
 }
 
-export function formatMemoriesBlock(memories: Memory[]): string {
-  if (memories.length === 0) return '(暂无记忆)';
+export function formatMemoriesBlock(
+  memories: Memory[],
+  locale: SupportedLocale = DEFAULT_LOCALE,
+): string {
+  if (memories.length === 0) return translate(locale, 'prompt.memoryEmpty');
   return memories.map(formatMemoryLine).join('\n');
 }

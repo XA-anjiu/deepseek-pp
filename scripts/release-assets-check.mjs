@@ -24,10 +24,15 @@ for (const zip of extensionZips) {
   if (manifest.version !== version) {
     failures.push(`${zip.browser} zip manifest version ${manifest.version} does not match ${version}`);
   }
-  if (manifest.name !== 'DeepSeek++') {
+  if (manifest.name !== '__MSG_extension_name__') {
     failures.push(`${zip.browser} zip manifest name mismatch: ${manifest.name}`);
   }
+  if (manifest.default_locale !== 'en') {
+    failures.push(`${zip.browser} zip default_locale mismatch: ${manifest.default_locale}`);
+  }
   assertZipContains(zip.path, 'background.js', `${zip.browser} zip must contain background.js`);
+  assertZipContains(zip.path, '_locales/en/messages.json', `${zip.browser} zip must contain English locale messages`);
+  assertZipContains(zip.path, '_locales/zh_CN/messages.json', `${zip.browser} zip must contain Chinese locale messages`);
 }
 
 assertFile(sourceZip, 'source zip');

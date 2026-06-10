@@ -5,7 +5,7 @@
 <h1 align="center">DeepSeek++</h1>
 
 <p align="center">
-  <strong>DeepSeek 浏览器插件：把 DeepSeek 网页版扩展成支持 MCP、记忆、Skill、自动化和对话导出的 AI Agent 工作台</strong>
+  <strong>DeepSeek 浏览器插件：把 DeepSeek 网页版扩展成支持中英文体验、MCP、记忆、Skill、自动化和对话导出的 AI Agent 工作台</strong>
 </p>
 
 <p align="center">
@@ -34,9 +34,11 @@
 
 ## 产品定位
 
-DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏览器扩展，支持 Chrome、Edge 和 Firefox。它把 DeepSeek Web 扩展成 AI agent workspace，让用户在同一浏览器工作流里使用 MCP 工具、长期记忆、Skill、系统提示词预设、联网搜索、网页读取、对话导出和定时自动化。
+DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏览器扩展，支持 Chrome、Edge 和 Firefox。它把 DeepSeek Web 扩展成 AI agent workspace，让用户在同一浏览器工作流里使用中英文界面、MCP 工具、长期记忆、Skill、系统提示词预设、联网搜索、网页读取、对话导出和定时自动化。
 
 如果你在寻找 DeepSeek Chrome extension、DeepSeek MCP tools、DeepSeek memory plugin、DeepSeek conversation export 或 DeepSeek AI agent，DeepSeek++ 对应的是同一个本地优先的 DeepSeek 浏览器增强工作台。
+
+语言可设为跟随浏览器、简体中文或 English。DeepSeek++ 会让侧边栏、右键菜单、工具结果、内置 Skill 行为和自动续跑提示保持一致语言，同时保留用户自己写的记忆、预设、自定义 Skill、自动化任务和同步数据原文。
 
 ## 目录
 
@@ -54,6 +56,7 @@ DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏
 |------|----------------|
 | AI agent browser extension / AI Agent 工作台 | 把 DeepSeek Web 扩展成可以持续执行任务、调用工具、复用记忆和调度自动化的浏览器内工作台。 |
 | DeepSeek browser extension / DeepSeek Chrome extension | 在 DeepSeek 网页版中加入侧边栏对话、右键发送文本、工具执行结果展示和 Chrome / Edge / Firefox 支持。 |
+| Multilingual DeepSeek extension / 中英文体验 | 可在简体中文和 English 之间切换，界面、内置工具说明和模型续跑行为保持同一语言。 |
 | DeepSeek MCP tools | 在侧边栏管理 MCP 服务、工具权限和执行状态，并把工具结果带回同一会话继续生成。 |
 | DeepSeek memory / 长期记忆 | 自动保存、筛选和注入长期记忆，让不同对话可以复用用户偏好、项目背景和常用信息。 |
 | DeepSeek Skills / `/skill` 工作流 | 通过内置、自定义或 GitHub 导入的 Skill 快速切换专家模式和任务模板。 |
@@ -64,6 +67,7 @@ DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏
 ## 适合场景
 
 - 希望把 DeepSeek 网页版扩展成带工具调用、MCP、记忆和自动化能力的 AI agent 工作台。
+- 希望 DeepSeek++ 的界面、工具提示和模型续跑提示能跟随中文或英文使用环境。
 - 希望在 Chrome、Edge 或 Firefox 中直接使用 DeepSeek 侧边栏对话、网页文本发送和固定场景 prompt。
 - 希望把项目背景、个人偏好、常用工作流和文档处理能力沉淀为长期记忆与可复用 Skill。
 - 希望把自己的 DeepSeek 对话记录本地备份为可读文件，便于归档、迁移或后续检索。
@@ -79,6 +83,13 @@ DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏
 - **官方 API Key** — 配置 Key 后，侧边栏对话和右键场景可在普通网页使用；未配置时右键场景仅在 DeepSeek 网页可用
 - **独立新会话** — 侧边栏对话支持新建会话，减少和当前页面已有对话互相干扰
 - **流式展示** — 回复会在侧边栏内持续渲染，登录状态缺失时会提示先回到 DeepSeek 页面完成登录
+
+### 中英文体验
+
+- **语言选择** — 可选择跟随浏览器、简体中文或 English
+- **一致的运行时语言** — 侧边栏、右键菜单、工具结果、内置工具说明和自动续跑提示会跟随所选语言
+- **模型行为同步** — 内置 Skill、工具调用说明、联网搜索提示和长任务续跑提示会使用当前语言
+- **保留用户原文** — 用户创建的记忆、预设、自定义 Skill、自动化 prompt、MCP 配置和同步数据不会因为切换语言被翻译或改写
 
 ### 类原生工具调用
 
@@ -231,7 +242,8 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
 | 右键场景 | 选中文本后可直接发送到侧边栏对话或套用自定义场景，适合跨网页总结、解释和改写。 |
 | Python 解释器工具 | Shell MCP 新增 `python_exec` 能力，并在侧边栏工具页提供更清晰的启用、权限和状态管理。 |
 | 本机工具稳定性 | Shell Host 的工具协议、执行策略和烟测覆盖同步增强，减少本机命令与解释器工具的状态差异。 |
-| 发布保障 | 开发依赖漏洞完成修复，发布前继续覆盖多浏览器打包、MCP、自动化、提示词冻结、workflow 和资产校验。 |
+| 中英文体验 | 设置页新增语言选择，侧边栏、右键菜单、工具结果、内置 Skill 和模型续跑提示可跟随中文或英文环境。 |
+| 发布保障 | 开发依赖漏洞完成修复，发布前继续覆盖多浏览器打包、MCP、自动化、多语言校验、workflow 和资产校验。 |
 
 感谢本版本贡献者：[@IjalG](https://github.com/IjalG) 贡献 Python interpreter / `python_exec` 能力。
 

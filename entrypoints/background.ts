@@ -111,6 +111,17 @@ import {
 import { normalizeConversationExportRequest } from '../core/export/schema';
 import { buildPromptAugmentation } from '../core/prompt';
 import { extractToolCalls } from '../core/interceptor/tool-parser';
+import {
+  createTranslator,
+  DEFAULT_LOCALE,
+  type LocaleMessageKey,
+  type MessageParams,
+  type SupportedLocale,
+} from '../core/i18n';
+import {
+  getResolvedLocaleState,
+  watchLocalePreference,
+} from '../core/i18n/store';
 import type { WebSearchToolName } from '../core/tool/web-search';
 import type { BackgroundConfig, DeepSeekTheme, GitHubSkillImportRequest, GitHubSkillSource, Memory, ModelType, NewMemory, PetConfig, Skill, SyncConfig, SyncCounts, SystemPromptPreset, ToolCall, ToolDescriptor, ToolExecutionRecord, ToolResult } from '../core/types';
 import type { McpServerCreateInput, McpServerUpdateInput } from '../core/mcp/types';
@@ -120,11 +131,22 @@ import type { ConversationExportProgress, ConversationExportResult } from '../co
 const DEEPSEEK_HOME_URL = 'https://chat.deepseek.com/';
 const DEEPSEEK_TAB_URL_PATTERN = '*://chat.deepseek.com/*';
 const REFRESH_AUTH_MESSAGE = { type: 'REFRESH_DEEPSEEK_AUTH' } as const;
-const MISSING_DEEPSEEK_AUTH_MESSAGE = '请先在 chat.deepseek.com 登录，或刷新 DeepSeek 页面后重试。';
 let chatSessionId: string | null = null;
 let chatParentMessageId: number | null = null;
 let officialApiChatMessages: OfficialDeepSeekMessage[] = [];
 const conversationExportControllers = new Map<string, AbortController>();
+let currentBackgroundLocale: SupportedLocale = DEFAULT_LOCALE;
+let currentBackgroundTranslator = createTranslator(DEFAULT_LOCALE);
+
+function backgroundT(key: LocaleMessageKey, params?: MessageParams): string {
+  return currentBackgroundTranslator.t(key, params);
+}
+
+async function refreshBackgroundLocale(): Promise<void> {
+  const resolved = await getResolvedLocaleState();
+  currentBackgroundLocale = resolved.locale;
+  currentBackgroundTranslator = createTranslator(resolved.locale);
+}
 type SidePanelApi = {
   setPanelBehavior?: (options: { openPanelOnActionClick: boolean }) => Promise<void>;
 };
@@ -139,10 +161,21 @@ type SyncDataSnapshot = {
 export default defineBackground(() => {
   enableSidePanelActionClick();
   registerAutomationAlarmListener();
+  refreshBackgroundLocale()
+    .then(() => createContextMenus())
+    .catch((error) => reportBackgroundStartupError('locale_init_failed', error));
+  watchLocalePreference(() => {
+    refreshBackgroundLocale()
+      .then(async () => {
+        await createContextMenus();
+        await broadcastStateUpdate();
+        await broadcastToolDescriptorsUpdate();
+      })
+      .catch((error) => reportBackgroundStartupError('locale_refresh_failed', error));
+  });
 
   archiveStaleMemories().catch((error) => reportBackgroundStartupError('archive_stale_memories_failed', error));
   ensureShellMcpPreset().catch((error) => reportBackgroundStartupError('shell_mcp_preset_failed', error));
-  createContextMenus().catch((error) => reportBackgroundStartupError('context_menus_failed', error));
   ensureAutomationWakeAlarm().catch((error) => reportBackgroundStartupError('automation_alarm_create_failed', error));
   scanDueAutomationsFromWake().catch((error) => reportBackgroundStartupError('automation_startup_scan_failed', error));
 
@@ -200,7 +233,7 @@ async function createContextMenus() {
 
   chrome.contextMenus.create({
     id: 'send-to-chat',
-    title: '发送到对话',
+    title: backgroundT('background.contextMenus.sendToChat'),
     contexts: ['selection'],
     ...menuScope,
   });
@@ -230,7 +263,7 @@ try {
     const selectedText = info.selectionText.trim();
     if (!selectedText) return;
 
-    // 在 async 边界之前打开侧边栏，保留用户手势
+    // Open the sidepanel before async boundaries so the user gesture remains valid.
     const tabId = tab?.id;
     if (tabId && chrome.sidePanel?.open) {
       chrome.sidePanel.open({ tabId }).catch(() => {});
@@ -260,7 +293,7 @@ try {
 } catch {}
 
 async function openSidePanelAndSendText(text: string, tab?: chrome.tabs.Tab) {
-  // 写入 storage 作为容灾：message 可能因侧边栏未就绪而丢失
+  // Persist to storage as a fallback because the sidepanel may not be ready for messages yet.
   try {
     await chrome.storage.local.set({ pendingChatText: text });
   } catch {}
@@ -298,7 +331,7 @@ function createBackgroundErrorResponse(
   if (type === 'EXECUTE_TOOL_CALL') {
     return {
       ok: false,
-      summary: '后台工具执行失败',
+      summary: backgroundT('content.toolBlock.summaries.backgroundFailed'),
       detail,
       error: {
         code: 'background_tool_execution_failed',
@@ -352,10 +385,10 @@ async function handleMessage(
     }
 
     case 'GET_SKILLS':
-      return getAllSkills();
+      return getAllSkills({ locale: currentBackgroundLocale });
 
     case 'GET_SKILL_LIBRARY':
-      return getSkillLibrary();
+      return getSkillLibrary(currentBackgroundLocale);
 
     case 'GET_GITHUB_SKILL_SOURCES':
       return getAllSkillSources();
@@ -561,10 +594,10 @@ async function handleMessage(
     }
 
     case 'GET_TOOL_DESCRIPTORS':
-      return getRuntimeToolDescriptors();
+      return getRuntimeToolDescriptors(currentBackgroundLocale);
 
     case 'REFRESH_TOOL_DESCRIPTORS': {
-      const tools = await refreshRuntimeToolDescriptors();
+      const tools = await refreshRuntimeToolDescriptors(currentBackgroundLocale);
       await broadcastToolDescriptorsUpdate(sender.tab?.id);
       await broadcastMcpServersUpdate(sender.tab?.id);
       return tools;
@@ -572,7 +605,7 @@ async function handleMessage(
 
     case 'EXECUTE_TOOL_CALL': {
       const call = message.payload as ToolCall;
-      const result = await executeRuntimeToolCall(call, call.source?.trigger ?? 'manual_chat');
+      const result = await executeRuntimeToolCall(call, call.source?.trigger ?? 'manual_chat', currentBackgroundLocale);
       await broadcastToolCallHistoryUpdate(sender.tab?.id);
       return result;
     }
@@ -682,7 +715,7 @@ async function handleMessage(
 
     case 'WEBDAV_UPLOAD_LOCAL': {
       const config = await getSyncConfig();
-      if (!config) throw new Error('未配置 WebDAV');
+      if (!config) throw new Error(backgroundT('background.sync.missingWebDav'));
 
       const [, snapshot] = await Promise.all([
         webdavMkcol(config),
@@ -698,7 +731,7 @@ async function handleMessage(
 
     case 'WEBDAV_DOWNLOAD_REMOTE': {
       const config = await getSyncConfig();
-      if (!config) throw new Error('未配置 WebDAV');
+      if (!config) throw new Error(backgroundT('background.sync.missingWebDav'));
 
       const snapshot = await getRemoteSyncDataSnapshot(config);
 
@@ -752,7 +785,7 @@ async function handleMessage(
         status: 'cancelled',
         current: 0,
         total: 0,
-        message: '导出已取消',
+        message: backgroundT('background.export.cancelled'),
       }, sender.tab?.id);
       return { ok: true };
     }
@@ -871,7 +904,7 @@ async function getDeepSeekTabsForAuthRefresh(preferredTabId?: number): Promise<c
 async function broadcastStateUpdate(excludeTabId?: number) {
   const [memories, skills, activePreset, modelType] = await Promise.all([
     getAllMemories(),
-    getAllSkills(),
+    getAllSkills({ locale: currentBackgroundLocale }),
     getActivePreset(),
     getModelType(),
   ]);
@@ -896,7 +929,7 @@ async function broadcastMcpServersUpdate(excludeTabId?: number) {
 }
 
 async function broadcastToolDescriptorsUpdate(excludeTabId?: number) {
-  const toolDescriptors = await getRuntimeToolDescriptors();
+  const toolDescriptors = await getRuntimeToolDescriptors(currentBackgroundLocale);
   await broadcastToTabs({ type: 'TOOL_DESCRIPTORS_UPDATED', toolDescriptors }, excludeTabId);
 }
 
@@ -961,7 +994,7 @@ async function handleConversationExport(
     return {
       ok: false,
       exportId,
-      error: MISSING_DEEPSEEK_AUTH_MESSAGE,
+      error: backgroundT('background.auth.missingDeepSeek'),
     };
   }
 
@@ -990,7 +1023,7 @@ async function handleConversationExport(
       status: 'running',
       current: 0,
       total: request.formats.length,
-      message: '生成导出文件',
+      message: backgroundT('background.export.generating'),
     }, excludeTabId);
 
     assertConversationExportNotCancelled(controller.signal);
@@ -1010,12 +1043,12 @@ async function handleConversationExport(
       status: aborted ? 'cancelled' : 'failed',
       current: 0,
       total: 0,
-      message: aborted ? '导出已取消' : error instanceof Error ? error.message : String(error),
+      message: aborted ? backgroundT('background.export.cancelled') : error instanceof Error ? error.message : String(error),
     }, excludeTabId);
     return {
       ok: false,
       exportId,
-      error: aborted ? '导出已取消' : error instanceof Error ? error.message : String(error),
+      error: aborted ? backgroundT('background.export.cancelled') : error instanceof Error ? error.message : String(error),
     };
   } finally {
     conversationExportControllers.delete(exportId);
@@ -1062,19 +1095,20 @@ async function executeAutomationWithContext(
   const [memories, activePreset, toolDescriptors] = await Promise.all([
     getAllMemories(),
     getActivePreset(),
-    getRuntimeToolDescriptors(),
+    getRuntimeToolDescriptors(currentBackgroundLocale),
   ]);
   const enabledDescriptors = toolDescriptors.filter((descriptor) => descriptor.execution.enabled);
 
   return runDeepSeekAutomation({
     ...request,
+    locale: currentBackgroundLocale,
     promptContext: {
       memories,
       presetContent: activePreset?.content ?? null,
       toolDescriptors: enabledDescriptors,
     },
   }, {
-    executeToolCall: (call) => executeRuntimeToolCall(call, 'automation'),
+    executeToolCall: (call) => executeRuntimeToolCall(call, 'automation', currentBackgroundLocale),
   });
 }
 
@@ -1163,7 +1197,7 @@ async function getRemoteSyncDataSnapshot(config: SyncConfig): Promise<SyncDataSn
 async function webdavGetRequired(config: SyncConfig, file: string): Promise<string> {
   const content = await webdavGet(config, file);
   if (content === null) {
-    throw new Error(`云端缺少 ${file}，已停止下载以避免覆盖本地数据`);
+    throw new Error(backgroundT('background.sync.missingRemoteFile', { file }));
   }
   return content;
 }
@@ -1189,7 +1223,7 @@ async function handleChatSubmitPrompt(prompt: string, excludeTabId?: number) {
 async function handleWebChatSubmitPrompt(prompt: string, excludeTabId?: number) {
   const headers = await loadOrRefreshClientHeaders(excludeTabId);
   if (!headers) {
-    broadcastChatChunk({ text: '', done: true, error: MISSING_DEEPSEEK_AUTH_MESSAGE }, excludeTabId);
+    broadcastChatChunk({ text: '', done: true, error: backgroundT('background.auth.missingDeepSeek') }, excludeTabId);
     return;
   }
 
@@ -1259,7 +1293,7 @@ async function buildSidepanelPrompt(prompt: string): Promise<{
   const [memories, activePreset, toolDescriptors] = await Promise.all([
     getAllMemories(),
     getActivePreset(),
-    getRuntimeToolDescriptors(),
+    getRuntimeToolDescriptors(currentBackgroundLocale),
   ]);
 
   const enabledDescriptors = toolDescriptors.filter((t) => t.execution.enabled);
@@ -1268,6 +1302,7 @@ async function buildSidepanelPrompt(prompt: string): Promise<{
     presetContent: activePreset?.content ?? null,
     toolDescriptors: enabledDescriptors,
     thinkingEnabled: false,
+    locale: currentBackgroundLocale,
   });
 
   return { augmented, enabledDescriptors };
@@ -1315,7 +1350,7 @@ async function runOfficialApiToolLoop(
 
     const execs: ToolExecutionRecord[] = [];
     for (const call of toolCalls) {
-      const result = await executeRuntimeToolCall(call, 'sidepanel_chat');
+      const result = await executeRuntimeToolCall(call, 'sidepanel_chat', currentBackgroundLocale);
       execs.push({
         name: call.name,
         result: {
@@ -1337,12 +1372,12 @@ async function runOfficialApiToolLoop(
       ...currentMessages,
       {
         role: 'user',
-        content: `[TOOL_RESULTS]\n${toolResultsText}\n[/TOOL_RESULTS]\n\n请根据上述工具执行结果继续回答。`,
+        content: backgroundT('background.chat.continueWithToolResults', { toolResults: toolResultsText }),
       },
     ];
   }
 
-  broadcastChatChunk({ text: '(达到最大工具调用步数，对话结束)', done: true }, excludeTabId);
+  broadcastChatChunk({ text: backgroundT('background.chat.maxToolSteps'), done: true }, excludeTabId);
   return currentMessages;
 }
 
@@ -1391,7 +1426,7 @@ async function runSidepanelToolLoop(
 
     const execs: ToolExecutionRecord[] = [];
     for (const call of toolCalls) {
-      const result = await executeRuntimeToolCall(call, 'sidepanel_chat');
+      const result = await executeRuntimeToolCall(call, 'sidepanel_chat', currentBackgroundLocale);
       execs.push({
         name: call.name,
         result: {
@@ -1410,7 +1445,9 @@ async function runSidepanelToolLoop(
       `<${e.name}_result>\n${JSON.stringify(e.result)}\n</${e.name}_result>`
     ).join('\n');
 
-    const continuationPrompt = `[TOOL_RESULTS]\n${toolResultsText}\n[/TOOL_RESULTS]\n\n请根据上述工具执行结果继续回答。`;
+    const continuationPrompt = backgroundT('background.chat.continueWithToolResults', {
+      toolResults: toolResultsText,
+    });
 
     currentInput = {
       ...currentInput,
@@ -1419,7 +1456,7 @@ async function runSidepanelToolLoop(
     };
   }
 
-  broadcastChatChunk({ text: '(达到最大工具调用步数，对话结束)', done: true }, excludeTabId);
+  broadcastChatChunk({ text: backgroundT('background.chat.maxToolSteps'), done: true }, excludeTabId);
 }
 
 function broadcastChatChunk(

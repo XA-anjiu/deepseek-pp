@@ -12,7 +12,7 @@ export async function hasDeepSeekApiKey(): Promise<boolean> {
 export async function saveDeepSeekApiKey(apiKey: string): Promise<void> {
   const normalized = normalizeApiKey(apiKey);
   if (!normalized) {
-    throw new Error('DeepSeek API Key 不能为空');
+    throw new Error('DeepSeek API Key cannot be empty');
   }
   await chrome.storage.local.set({ [DEEPSEEK_API_KEY_STORAGE_KEY]: normalized });
 }

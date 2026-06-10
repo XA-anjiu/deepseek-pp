@@ -10,11 +10,13 @@ const EXPECTED_HASHES = {
   systemTemplateChat: '5bca8e90d23381c9605cbfebf7ecb91f28f4010ddbc2a6ccc291fa046fcd6eec',
   systemTemplateThinking: 'fa31e863e5f54f7a4e48cffdbae0e543028de4a565f77504e66edd707c73b5f3',
   memoryToolSchemas: 'a64e0a8874552177eba10089d5acfdc2996d0b703f83b1a57e9d76c733da9a7b',
-  promptAugmentationBuild: '1b42d5b8df743388dfb86ee83e055e00a56fb5389bd7df1afd961c57b45b2335',
-  promptToolSchemaRenderer: 'd873bbe10566aaac581e827461e6abff82a0e3b5d1cd4ac1ca3c494b259bac01',
-  inlineAgentContinuationPrompt: '72c9a77d04a9d9b06258b3ba97e0f45c7d9c3a95d6beb402e1d3bbba5197b3c5',
-  inlineAgentNudgePrompt: '93bc1a0ce340e6212d30a9af1e345d0f7e1eaab9a495d8c78abb48f4ec94368d',
-  inlineAgentFinalizationPrompt: 'a476d1b4ad4d8f1895e2f1bedeacbc41932257c359106d7c9ecd090e7abff5da',
+  promptAugmentationBuild: '245f05165be0664e819b67693d47b13ce63933fbfd2394312bd0c8e8a42317a2',
+  promptToolSchemaRenderer: 'ff753dde88e3e3e91b5374c2ab7e7cc944771d68f8df90583d7027ba3c3435f9',
+  promptLocaleResourcesEn: '7aa94f1dbff4a5b795a38ff26cd77e09c937430cdf6d39b5ad57c2b13cb284a0',
+  promptLocaleResourcesZhCN: 'd38b803783fe051f737e00cbf6f73f1c750c7a0f4d40fde73944d1aefc8f6f48',
+  inlineAgentContinuationPrompt: 'c7c6d857cd4c14015329bccd7ce2e551b0f3490593e89c163db713e842cbfc22',
+  inlineAgentNudgePrompt: '4717a41143efacf66a2554c8d7d72c08f7192c0b0b93105a869f0638bd7ba4ea',
+  inlineAgentFinalizationPrompt: '7586a53173b5843865119a1e3ab266353baefcddc86f2f97e165a8e5303b6b01',
   inlineAgentPromptHelpers: 'cdb723464379a5ead572eff1d93fd4585d7f845739d67fa214fbbdc0694153c6',
 };
 
@@ -22,6 +24,8 @@ const sources = {
   constants: readSource('core/constants.ts'),
   augmentation: readSource('core/prompt/augmentation.ts'),
   inlinePrompt: readSource('core/inline-agent/prompt.ts'),
+  enResource: readSource('core/i18n/resources/en.ts'),
+  zhCNResource: readSource('core/i18n/resources/zh-CN.ts'),
 };
 
 const cases = {
@@ -51,6 +55,16 @@ const cases = {
     extractFunction('createExamplePayload', sources.augmentation),
     extractFunction('exampleValue', sources.augmentation),
   ].join('\n\n'),
+  promptLocaleResourcesEn: extractRegex(
+    'prompt locale resources en',
+    sources.enResource,
+    /  prompt: \{[\s\S]*?\n  pet: \{/,
+  ),
+  promptLocaleResourcesZhCN: extractRegex(
+    'prompt locale resources zh-CN',
+    sources.zhCNResource,
+    /  prompt: \{[\s\S]*?\n  pet: \{/,
+  ),
   inlineAgentContinuationPrompt: extractFunction('buildContinuationPrompt', sources.inlinePrompt),
   inlineAgentNudgePrompt: extractFunction('buildNudgePrompt', sources.inlinePrompt),
   inlineAgentFinalizationPrompt: extractFunction('buildFinalizationPrompt', sources.inlinePrompt),

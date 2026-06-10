@@ -1,5 +1,7 @@
+import type { LocaleMessageKey, MessageParams } from '../../../core/i18n';
 import type { Memory } from '../../../core/types';
 import { MEMORY_TYPE_MAP, SVG_PATHS } from '../constants';
+import { useI18n } from '../i18n';
 
 interface Props {
   memory: Memory;
@@ -9,8 +11,10 @@ interface Props {
 }
 
 export default function MemoryCard({ memory, onDelete, onEdit, onTogglePin }: Props) {
+  const { t } = useI18n();
   const typeInfo = MEMORY_TYPE_MAP[memory.type] ?? MEMORY_TYPE_MAP.topic;
-  const age = formatAge(memory.createdAt);
+  const age = formatAge(memory.createdAt, t);
+  const pinTitle = memory.pinned ? t('sidepanel.memory.actions.unpin') : t('sidepanel.memory.actions.pin');
 
   return (
     <div className="ds-card rounded-xl p-3.5 group animate-fade-in">
@@ -24,7 +28,7 @@ export default function MemoryCard({ memory, onDelete, onEdit, onTogglePin }: Pr
               border: `1px solid ${typeInfo.border}`,
             }}
           >
-            {typeInfo.label}
+            {t(typeInfo.labelKey)}
           </span>
           <span className="text-[13px] font-medium truncate" style={{ color: 'var(--ds-text)' }}>
             {memory.name}
@@ -38,17 +42,17 @@ export default function MemoryCard({ memory, onDelete, onEdit, onTogglePin }: Pr
           )}
         </div>
         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-          <button onClick={onTogglePin} className="ds-action-btn ds-action-btn-pin p-1.5 rounded-md" title="置顶">
+          <button onClick={onTogglePin} className="ds-action-btn ds-action-btn-pin p-1.5 rounded-md" title={pinTitle}>
             <svg className="w-3.5 h-3.5" fill={memory.pinned ? 'currentColor' : 'none'} viewBox="0 0 20 20" stroke="currentColor" strokeWidth={memory.pinned ? 0 : 1.5}>
               <path d={SVG_PATHS.star} />
             </svg>
           </button>
-          <button onClick={onEdit} className="ds-action-btn ds-action-btn-edit p-1.5 rounded-md" title="编辑">
+          <button onClick={onEdit} className="ds-action-btn ds-action-btn-edit p-1.5 rounded-md" title={t('common.edit')}>
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d={SVG_PATHS.edit} />
             </svg>
           </button>
-          <button onClick={onDelete} className="ds-action-btn ds-action-btn-delete p-1.5 rounded-md" title="删除">
+          <button onClick={onDelete} className="ds-action-btn ds-action-btn-delete p-1.5 rounded-md" title={t('common.delete')}>
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d={SVG_PATHS.trash} />
             </svg>
@@ -76,13 +80,16 @@ export default function MemoryCard({ memory, onDelete, onEdit, onTogglePin }: Pr
   );
 }
 
-function formatAge(ts: number): string {
+function formatAge(
+  ts: number,
+  t: (key: LocaleMessageKey, params?: MessageParams) => string,
+): string {
   const diff = Date.now() - ts;
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return '刚刚';
-  if (mins < 60) return `${mins}分钟前`;
+  if (mins < 1) return t('sidepanel.memory.age.justNow');
+  if (mins < 60) return t('sidepanel.memory.age.minutesAgo', { count: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}小时前`;
+  if (hours < 24) return t('sidepanel.memory.age.hoursAgo', { count: hours });
   const days = Math.floor(hours / 24);
-  return `${days}天前`;
+  return t('sidepanel.memory.age.daysAgo', { count: days });
 }

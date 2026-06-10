@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Skill } from '../../../core/types';
+import { useI18n } from '../i18n';
 
 interface Props {
   initialSkill?: Skill | null;
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export default function SkillForm({ initialSkill, onSave, onCancel }: Props) {
+  const { t } = useI18n();
   const [name, setName] = useState(initialSkill?.name ?? '');
   const [description, setDescription] = useState(initialSkill?.description ?? '');
   const [instructions, setInstructions] = useState(initialSkill?.instructions ?? '');
@@ -41,21 +43,21 @@ export default function SkillForm({ initialSkill, onSave, onCancel }: Props) {
       <div>
         <input
           type="text"
-          placeholder="名称（如 my-skill）"
+          placeholder={t('sidepanel.skill.form.namePlaceholder')}
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="ds-input w-full px-3 py-2 text-sm rounded-lg transition-all duration-150"
         />
         {normalizedName && (
           <p className="text-[11px] mt-1" style={{ color: 'var(--ds-text-tertiary)' }}>
-            触发命令：<code className="font-mono" style={{ color: 'var(--ds-blue)' }}>/{normalizedName}</code>
+            {t('sidepanel.skill.form.triggerCommand')} <code className="font-mono" style={{ color: 'var(--ds-blue)' }}>/{normalizedName}</code>
           </p>
         )}
       </div>
 
       <input
         type="text"
-        placeholder="描述（何时使用这个 skill）"
+        placeholder={t('sidepanel.skill.form.descriptionPlaceholder')}
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         className="ds-input w-full px-3 py-2 text-sm rounded-lg transition-all duration-150"
@@ -63,11 +65,11 @@ export default function SkillForm({ initialSkill, onSave, onCancel }: Props) {
 
       <div>
         <label className="text-[11px] mb-1.5 block font-medium" style={{ color: 'var(--ds-text-tertiary)' }}>
-          指令（Markdown 格式，告诉 AI 如何执行）
+          {t('sidepanel.skill.form.instructionsLabel')}
         </label>
         <textarea
           rows={6}
-          placeholder="你是一位...&#10;&#10;## 核心原则&#10;- ..."
+          placeholder={t('sidepanel.skill.form.instructionsPlaceholder')}
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
           className="ds-input w-full px-3 py-2 text-sm font-mono rounded-lg resize-none transition-all duration-150"
@@ -82,7 +84,7 @@ export default function SkillForm({ initialSkill, onSave, onCancel }: Props) {
           className="w-4 h-4 rounded"
           style={{ accentColor: 'var(--ds-blue)' }}
         />
-        启用记忆注入
+        {t('sidepanel.skill.form.memoryInjectionLabel')}
       </label>
 
       <div className="flex gap-2 justify-end pt-1">
@@ -91,13 +93,13 @@ export default function SkillForm({ initialSkill, onSave, onCancel }: Props) {
           onClick={onCancel}
           className="ds-btn-cancel px-3.5 py-1.5 text-xs font-medium rounded-lg transition-all duration-150"
         >
-          取消
+          {t('common.cancel')}
         </button>
         <button
           type="submit"
           className="ds-btn-primary px-4 py-1.5 text-xs font-medium text-white rounded-lg transition-all duration-150"
         >
-          {isEditing ? '保存更改' : '保存'}
+          {isEditing ? t('common.saveChanges') : t('common.save')}
         </button>
       </div>
     </form>

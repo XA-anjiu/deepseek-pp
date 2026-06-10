@@ -11,7 +11,7 @@ import type {
   ToolCallRestoreRecord,
   ToolDescriptor,
 } from '../core/types';
-import type { SkillPopupItem } from '../core/ui/skill-popup';
+import type { SkillPopupCopy, SkillPopupItem } from '../core/ui/skill-popup';
 
 const MAIN_WORLD_SOURCE = 'deepseek-pp-main';
 const CONTENT_SOURCE = 'deepseek-pp-content';
@@ -112,11 +112,11 @@ function handlePortMessage(data: unknown): void {
 
   switch (message.type) {
     case 'SYNC_HOOK_STATE': {
-      const value = message as { toolDescriptors?: unknown; skillSummaries?: unknown };
+      const value = message as { toolDescriptors?: unknown; skillSummaries?: unknown; skillPopupCopy?: unknown };
       updateHookState({
         toolDescriptors: normalizeToolDescriptors(value.toolDescriptors),
       });
-      initSkillPopup(normalizeSkillSummaries(value.skillSummaries));
+      initSkillPopup(normalizeSkillSummaries(value.skillSummaries), normalizeSkillPopupCopy(value.skillPopupCopy));
       break;
     }
     case 'AUGMENT_REQUEST_BODY_RESULT': {
@@ -178,4 +178,10 @@ function normalizeSkillSummaries(value: unknown): SkillPopupItem[] {
       typeof (item as { description?: unknown }).description === 'string',
     )
     .map((item) => ({ name: item.name, description: item.description }));
+}
+
+function normalizeSkillPopupCopy(value: unknown): Partial<SkillPopupCopy> {
+  if (!value || typeof value !== 'object') return {};
+  const hint = (value as { hint?: unknown }).hint;
+  return typeof hint === 'string' && hint.trim() ? { hint } : {};
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { SystemPromptPreset } from '../../../core/types';
+import { useI18n } from '../i18n';
 
 interface Props {
   initial?: SystemPromptPreset;
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export default function PresetForm({ initial, onSave, onCancel }: Props) {
+  const { t } = useI18n();
   const [name, setName] = useState(initial?.name ?? '');
   const [content, setContent] = useState(initial?.content ?? '');
 
@@ -28,7 +30,7 @@ export default function PresetForm({ initial, onSave, onCancel }: Props) {
     <form onSubmit={handleSubmit} className="ds-form rounded-xl p-4 space-y-3">
       <input
         type="text"
-        placeholder="预设名称（如：代码助手、翻译专家）"
+        placeholder={t('sidepanel.preset.form.namePlaceholder')}
         value={name}
         onChange={(e) => setName(e.target.value)}
         className="ds-input w-full px-3 py-2 text-sm rounded-lg transition-all duration-150"
@@ -36,11 +38,11 @@ export default function PresetForm({ initial, onSave, onCancel }: Props) {
 
       <div>
         <label className="text-[11px] mb-1.5 block font-medium" style={{ color: 'var(--ds-text-tertiary)' }}>
-          系统提示词内容
+          {t('sidepanel.preset.form.contentLabel')}
         </label>
         <textarea
           rows={8}
-          placeholder={"你是一位专业的...\\n\\n## 核心原则\\n- ..."}
+          placeholder={t('sidepanel.preset.form.contentPlaceholder')}
           value={content}
           onChange={(e) => setContent(e.target.value)}
           className="ds-input w-full px-3 py-2 text-sm font-mono rounded-lg resize-none transition-all duration-150"
@@ -53,13 +55,13 @@ export default function PresetForm({ initial, onSave, onCancel }: Props) {
           onClick={onCancel}
           className="ds-btn-cancel px-3.5 py-1.5 text-xs font-medium rounded-lg transition-all duration-150"
         >
-          取消
+          {t('common.cancel')}
         </button>
         <button
           type="submit"
           className="ds-btn-primary px-4 py-1.5 text-xs font-medium text-white rounded-lg transition-all duration-150"
         >
-          {initial ? '更新' : '保存'}
+          {initial ? t('common.update') : t('common.save')}
         </button>
       </div>
     </form>

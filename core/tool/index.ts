@@ -28,7 +28,9 @@ export {
   MEMORY_TOOL_DESCRIPTORS,
   MEMORY_TOOL_NAMES,
   MEMORY_TOOL_PROVIDER,
+  createMemoryToolDescriptors,
   createMemoryToolProvider,
+  createMemoryToolProviderIdentity,
   executeMemoryToolCall,
   isMemoryToolName,
 } from './memory';
@@ -37,12 +39,15 @@ export {
   WEB_SEARCH_TOOL_DESCRIPTORS,
   WEB_SEARCH_TOOL_NAMES,
   WEB_SEARCH_TOOL_PROVIDER,
+  createWebSearchToolDescriptors,
+  createWebSearchToolProviderIdentity,
   executeWebSearchToolCall,
   isWebSearchToolName,
 } from './web-search';
 
 export {
   DEFAULT_TOOL_DESCRIPTORS,
+  createDefaultToolDescriptors,
   createToolCallFromInvocation,
   createToolInvocationCatalog,
   createXmlToolCallRegex,

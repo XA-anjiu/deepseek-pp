@@ -110,7 +110,7 @@ function buildOfficialSkillInstructions(name: string): string {
   const dependencyDocs = dependencies.map((dependencyName) => renderDependency(dependencyName));
   const officialDoc = renderOfficialDoc(doc.name, doc.body);
   const parts = [
-    DEEPSEEK_OFFICECLI_EXECUTION_GUARDRAILS,
+    renderDeepSeekOfficeCliExecutionGuardrails(),
     ...dependencyDocs,
     officialDoc,
   ];
@@ -202,7 +202,8 @@ function firstModule(modules: Record<string, string>): string {
   return values[0];
 }
 
-const DEEPSEEK_OFFICECLI_EXECUTION_GUARDRAILS = `你正在 DeepSeek++ 内使用 OfficeCLI 官方 skill。官方 OfficeCLI skill/style 内容已内置，但执行边界由 DeepSeek++ 覆盖。
+function renderDeepSeekOfficeCliExecutionGuardrails(): string {
+  return `你正在 DeepSeek++ 内使用 OfficeCLI 官方 skill。官方 OfficeCLI skill/style 内容已内置，但执行边界由 DeepSeek++ 覆盖。
 
 ## DeepSeek++ 执行边界
 
@@ -232,3 +233,4 @@ const DEEPSEEK_OFFICECLI_EXECUTION_GUARDRAILS = `你正在 DeepSeek++ 内使用 
 <shell_exec>{"command":"which -a officecli || true\\nofficecli --version\\nofficecli --help | sed -n '1,140p'","timeout_ms":60000}</shell_exec>
 
 如果第一条 \`officecli\` 指向项目的 \`node_modules/.bin/officecli\`，或 help 输出是 hosted AI 生成版，停止并报告二进制不兼容。不要退回 \`new --prompt\`。`;
+}

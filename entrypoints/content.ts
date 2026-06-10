@@ -15,7 +15,7 @@ import type {
 } from '../core/types';
 import { normalizePetConfig } from '../core/pet/config';
 import { pickPetLine, type PetState } from '../core/pet/lines';
-import { DEFAULT_TOOL_DESCRIPTORS, createToolInvocationCatalog } from '../core/tool/invocation';
+import { createDefaultToolDescriptors, createToolInvocationCatalog } from '../core/tool/invocation';
 import { normalizeBackgroundConfig } from '../core/background/config';
 import { stripToolCalls } from '../core/interceptor/tool-parser';
 import { augmentRequestBody } from '../core/interceptor/request-augmentation';
@@ -41,6 +41,17 @@ import {
   createAgentFooter,
 } from '../core/inline-agent/renderer';
 import { renderInlineMarkdown } from '../core/inline-agent/markdown';
+import {
+  createTranslator,
+  DEFAULT_LOCALE,
+  type LocaleMessageKey,
+  type MessageParams,
+  type SupportedLocale,
+} from '../core/i18n';
+import {
+  getResolvedLocaleState,
+  watchLocalePreference,
+} from '../core/i18n/store';
 
 import { createClientHeaders, rememberDeepSeekClientHeaders, saveClientHeadersToStorage } from '../core/deepseek/adapter';
 import type {
@@ -108,7 +119,7 @@ const CONVERSATION_EXPORT_FORMAT_OPTIONS: ConversationExportFormatOption[] = [
   { format: 'markdown', label: 'Markdown', defaultChecked: false },
   { format: 'pdf', label: 'PDF', defaultChecked: false },
 ];
-// 这些状态会在长时间停留时周期性地轮播台词；其余状态只在进入时说一句。
+// These states keep rotating pet lines during long stays; other states speak once on entry.
 const PET_BUBBLE_LOOPING_STATES: ReadonlySet<PetState> = new Set<PetState>([
   'idle',
   'thinking',
@@ -189,7 +200,9 @@ let currentMemories: Memory[] = [];
 let currentSkills: Skill[] = [];
 let currentActivePreset: SystemPromptPreset | null = null;
 let currentModelType: ModelType = null;
-let currentToolDescriptors: ToolDescriptor[] = [...DEFAULT_TOOL_DESCRIPTORS];
+let currentContentLocale: SupportedLocale = DEFAULT_LOCALE;
+let currentContentTranslator = createTranslator(DEFAULT_LOCALE);
+let currentToolDescriptors: ToolDescriptor[] = [...createDefaultToolDescriptors(currentContentLocale)];
 let currentRequestMessageCount = 0;
 let mainWorldPort: MessagePort | null = null;
 let mainWorldBridgeReady = false;
@@ -198,10 +211,50 @@ let toolOpenTagRe = buildToolOpenTagRegex(currentToolDescriptors);
 let toolMarkerRe = buildToolMarkerRegex(currentToolDescriptors);
 let extensionContextValid = true;
 
+function contentT(key: LocaleMessageKey, params?: MessageParams): string {
+  return currentContentTranslator.t(key, params);
+}
+
+async function refreshContentLocale(): Promise<void> {
+  const resolved = await getResolvedLocaleState();
+  currentContentLocale = resolved.locale;
+  currentContentTranslator = createTranslator(resolved.locale);
+  refreshLocalizedContentSurfaces();
+}
+
+function refreshLocalizedContentSurfaces(): void {
+  setConversationExportButtonsStatus(activeConversationExportId ? 'running' : 'idle');
+  if (exportActionMenuEl && exportActionMenuButton) {
+    showConversationExportMenu(exportActionMenuButton);
+  }
+  renderTokenSpeedIndicator(lastTokenSpeedProgress);
+  if (toolBlockEl) updateToolBlockContent(toolBlockEl, toolExecutions);
+  scheduleRenderRestoredToolBlocks();
+  scheduleRenderRestoredInlineAgentTraces();
+}
+
+function getAgentRendererLabels() {
+  return {
+    step: (stepNumber: number) => contentT('content.agent.step', { index: stepNumber }),
+    streaming: contentT('content.agent.streaming'),
+    stop: contentT('content.agent.stop'),
+    footerComplete: (totalSteps: number, totalTools: number) =>
+      contentT('content.agent.footerComplete', { steps: totalSteps, tools: totalTools }),
+    footerError: (totalSteps: number, totalTools: number) =>
+      contentT('content.agent.footerError', { steps: totalSteps, tools: totalTools }),
+  };
+}
+
 export default defineContentScript({
   matches: ['*://chat.deepseek.com/*'],
   runAt: 'document_start',
   async main() {
+    await refreshContentLocale();
+    watchLocalePreference(() => {
+      void refreshContentLocale()
+        .then(() => loadAndSyncRuntimeState())
+        .catch(() => undefined);
+    });
     installExtensionInvalidationGuards();
     installMainWorldBridge();
 
@@ -381,6 +434,7 @@ async function handleAugmentRequestBody(data: { id?: unknown; body?: unknown }):
       modelType: currentModelType,
       toolDescriptors: currentToolDescriptors,
       messageCount: currentRequestMessageCount,
+      locale: currentContentLocale,
     });
 
     if (result) {
@@ -495,7 +549,7 @@ function invalidateExtensionContext() {
   stopConversationExportActionInjector();
 }
 
-/** 主世界捕获到 DeepSeek 请求头后，隔离世界负责写入 chrome.storage */
+/** Isolated world writes captured DeepSeek request headers to chrome.storage. */
 async function persistDeepSeekClientHeaders(capturedHeaders?: Record<string, string> | null): Promise<boolean> {
   try {
     const headers = capturedHeaders ?? createClientHeaders();
@@ -503,7 +557,7 @@ async function persistDeepSeekClientHeaders(capturedHeaders?: Record<string, str
       rememberDeepSeekClientHeaders(headers);
       const saved = await saveClientHeadersToStorage();
       if (!saved) return false;
-      // 通知侧边栏重新检查登录状态
+      // Ask the sidepanel to re-check login status.
       chrome.runtime.sendMessage({ type: 'AUTH_STATUS_CHANGED' }).catch(() => {});
       return true;
     }
@@ -773,7 +827,7 @@ function applyConversationExportButtonStatus(button: HTMLButtonElement, status: 
   const running = status === 'running';
   button.disabled = running;
   button.dataset.status = status;
-  button.title = running ? '正在导出当前对话' : '导出当前对话';
+  button.title = running ? contentT('content.export.buttonRunning') : contentT('content.export.buttonIdle');
   button.setAttribute('aria-label', button.title);
 }
 
@@ -795,20 +849,20 @@ function showConversationExportMenu(button: HTMLButtonElement) {
 
   const sessionId = getCurrentChatSessionId();
   if (!sessionId) {
-    showConversationExportToast('当前页面还没有可导出的对话。', 'error');
+    showConversationExportToast(contentT('content.export.emptyConversation'), 'error');
     return;
   }
 
   const menu = document.createElement('div');
   menu.className = EXPORT_ACTION_MENU_CLASS;
   menu.setAttribute('role', 'dialog');
-  menu.setAttribute('aria-label', '选择导出格式');
+  menu.setAttribute('aria-label', contentT('content.export.formatDialogLabel'));
   menu.addEventListener('click', (event) => event.stopPropagation());
 
   const form = document.createElement('form');
   const title = document.createElement('div');
   title.className = 'dpp-export-menu-title';
-  title.textContent = '导出格式';
+  title.textContent = contentT('content.export.formatTitle');
   form.appendChild(title);
 
   for (const option of CONVERSATION_EXPORT_FORMAT_OPTIONS) {
@@ -829,11 +883,11 @@ function showConversationExportMenu(button: HTMLButtonElement) {
   actions.className = 'dpp-export-menu-actions';
   const cancel = document.createElement('button');
   cancel.type = 'button';
-  cancel.textContent = '取消';
+  cancel.textContent = contentT('common.cancel');
   cancel.addEventListener('click', () => closeConversationExportMenu());
   const submit = document.createElement('button');
   submit.type = 'submit';
-  submit.textContent = '导出';
+  submit.textContent = contentT('content.export.submit');
   actions.append(cancel, submit);
   form.appendChild(actions);
 
@@ -920,7 +974,7 @@ async function startCurrentConversationExport(
   if (activeConversationExportId) return;
   const sessionId = getCurrentChatSessionId();
   if (!sessionId) {
-    showConversationExportToast('当前页面还没有可导出的对话。', 'error');
+    showConversationExportToast(contentT('content.export.emptyConversation'), 'error');
     return;
   }
 
@@ -928,12 +982,12 @@ async function startCurrentConversationExport(
   const exportId = crypto.randomUUID();
   activeConversationExportId = exportId;
   setConversationExportButtonsStatus('running');
-  showConversationExportToast('正在导出当前对话...', 'info');
+  showConversationExportToast(contentT('content.export.progress'), 'info');
 
   try {
     const response = await sendConversationExportRequest(exportId, sessionId, formats);
     if (!response?.ok) {
-      throw new Error(response?.error ?? '导出失败');
+      throw new Error(response?.error ?? contentT('content.export.failed'));
     }
 
     for (const artifact of response.artifacts) {
@@ -945,7 +999,7 @@ async function startCurrentConversationExport(
     const warning = response.summary.failedSessionCount > 0;
     showConversationExportToast(
       warning
-        ? '导出完成，但部分会话读取失败，请检查导出文件中的 Export Warnings。'
+        ? contentT('content.export.partialSuccess')
         : getConversationExportSuccessMessage(formats),
       warning ? 'warning' : 'success',
     );
@@ -967,9 +1021,9 @@ function dedupeConversationExportUiFormats(formats: ConversationExportArtifact['
 
 function getConversationExportSuccessMessage(formats: ConversationExportArtifact['format'][]): string {
   if (formats.includes('pdf')) {
-    return '当前对话已导出。';
+    return contentT('content.export.success');
   }
-  return '当前对话已导出。';
+  return contentT('content.export.success');
 }
 
 async function sendConversationExportRequest(
@@ -1565,6 +1619,7 @@ function startInlineAgentIfNeeded(
         d.name === 'web_search' ||
         d.name === 'web_fetch',
     ),
+    locale: currentContentLocale,
     powWasmUrl: chrome.runtime.getURL(DEEPSEEK_POW_WASM_PATH),
   };
 
@@ -1601,7 +1656,7 @@ function stopInlineAgent(): void {
   updateActiveInlineAgentTrace((trace) => ({
     ...trace,
     status: 'stopping',
-    error: '已停止',
+    error: contentT('content.agent.stopped'),
   }), { immediate: true });
   inlineAgentLoopId = null;
   inlineAgentContainer = null;
@@ -1612,7 +1667,7 @@ function stopInlineAgent(): void {
   activeAgentAbort?.abort();
   activeAgentAbort = null;
   if (container) {
-    const footer = createAgentFooter(0, 0, false, '已停止');
+    const footer = createAgentFooter(0, 0, false, contentT('content.agent.stopped'), getAgentRendererLabels());
     container.appendChild(footer);
   }
 }
@@ -1687,7 +1742,7 @@ function handleInlineAgentLoopEvent(type: string, data: unknown): void {
 function handleAgentStepStarted(data: { loopId: string; stepIndex: number }): void {
   if (data.loopId !== inlineAgentLoopId || !inlineAgentContainer) return;
 
-  const stepEl = createAgentStepElement(data.stepIndex, stopInlineAgent);
+  const stepEl = createAgentStepElement(data.stepIndex, stopInlineAgent, getAgentRendererLabels());
   inlineAgentCurrentStep = stepEl;
   inlineAgentContainer.appendChild(stepEl);
   updateActiveInlineAgentTrace((trace) => upsertInlineAgentTraceStep(trace, {
@@ -1720,8 +1775,8 @@ function handleAgentStepComplete(msg: InlineAgentStepCompleteMsg): void {
   }
 
   const label = msg.toolExecutions.length > 0
-    ? `完成（${msg.toolExecutions.length} 个工具）`
-    : '完成';
+    ? contentT('content.agent.completeWithTools', { count: msg.toolExecutions.length })
+    : contentT('content.agent.complete');
   updateStepStatus(inlineAgentCurrentStep, 'complete', label);
   const fullText = getInlineAgentStepText(inlineAgentCurrentStep);
   updateActiveInlineAgentTrace((trace) => updateInlineAgentTraceStep(trace, msg.stepIndex, {
@@ -1750,7 +1805,7 @@ function handleAgentLoopComplete(msg: InlineAgentLoopCompleteMsg): void {
     const finalText = getInlineAgentDisplayFinalText(msg.finalText);
     appendInlineAgentFinalAnswer(inlineAgentContainer, finalText, msg.loopId);
 
-    const footer = createAgentFooter(msg.totalSteps, msg.totalTools, false);
+    const footer = createAgentFooter(msg.totalSteps, msg.totalTools, false, undefined, getAgentRendererLabels());
     inlineAgentContainer.appendChild(footer);
     updateActiveInlineAgentTrace((trace) => ({
       ...trace,
@@ -1813,7 +1868,7 @@ function handleAgentLoopError(msg: InlineAgentLoopErrorMsg): void {
       updateStepStatus(inlineAgentCurrentStep, 'error', msg.error);
     }
 
-    const footer = createAgentFooter(msg.stepIndex, msg.totalTools, true, msg.error);
+    const footer = createAgentFooter(msg.stepIndex, msg.totalTools, true, msg.error, getAgentRendererLabels());
     inlineAgentContainer.appendChild(footer);
     updateActiveInlineAgentTrace((trace) => ({
       ...trace,
@@ -1837,7 +1892,7 @@ function runToolExecution(call: ToolCall): Promise<ToolCardResult> {
   const task = executeToolCall(call)
     .catch((err): ToolCardResult => ({
       ok: false,
-      summary: '执行失败',
+      summary: contentT('content.toolBlock.summaries.failed'),
       detail: err instanceof Error ? err.message : String(err),
     }))
     .then((result) => {
@@ -1939,7 +1994,10 @@ function renderTokenSpeedIndicator(progress: ResponseTokenSpeedPayload): boolean
   badge.textContent = speed;
   badge.dataset.active = progress.active ? 'true' : 'false';
   badge.setAttribute('aria-label', `Token output speed ${speed}`);
-  badge.setAttribute('title', `Token 输出速度：${speed}${progress.active ? '' : '（空闲）'}`);
+  badge.setAttribute('title', contentT('content.tokenSpeed.title', {
+    speed,
+    idle: progress.active ? '' : contentT('content.tokenSpeed.idleSuffix'),
+  }));
   return true;
 }
 
@@ -2155,6 +2213,9 @@ function syncToMainWorld(
     skillSummaries: skills
       .filter((skill) => skill.enabled !== false)
       .map((skill) => ({ name: skill.name, description: skill.description })),
+    skillPopupCopy: {
+      hint: contentT('content.skillPopup.hint'),
+    },
   });
 }
 
@@ -2163,9 +2224,9 @@ function escapeRegExp(value: string): string {
 }
 
 function normalizeToolDescriptors(value: unknown): ToolDescriptor[] {
-  if (!Array.isArray(value)) return [...DEFAULT_TOOL_DESCRIPTORS];
+  if (!Array.isArray(value)) return [...createDefaultToolDescriptors(currentContentLocale)];
   const descriptors = value.filter((item): item is ToolDescriptor => Boolean(item && typeof item === 'object'));
-  return descriptors.length > 0 ? descriptors : [...DEFAULT_TOOL_DESCRIPTORS];
+  return descriptors.length > 0 ? descriptors : [...createDefaultToolDescriptors(currentContentLocale)];
 }
 
 function buildToolOpenTagRegex(descriptors: ToolDescriptor[]): RegExp {
@@ -2481,7 +2542,7 @@ async function executeToolCall(call: ToolCall): Promise<ToolCardResult> {
   if (call.parseError) {
     return {
       ok: false,
-      summary: '工具格式错误',
+      summary: contentT('tool.runtime.invalidFormat'),
       detail: call.parseError.message,
       error: call.parseError,
     };
@@ -2504,7 +2565,11 @@ async function executeToolCall(call: ToolCall): Promise<ToolCardResult> {
   }
 
   if (!extensionContextValid) {
-    return { ok: false, summary: '执行失败', detail: '扩展已重新加载，请刷新当前 DeepSeek 页面后重试。' };
+    return {
+      ok: false,
+      summary: contentT('content.toolBlock.summaries.failed'),
+      detail: contentT('content.extensionReloaded'),
+    };
   }
   return createInvalidRuntimeToolResult(result);
 }
@@ -2530,7 +2595,7 @@ async function sendRuntimeToolCallMessage(call: ToolCall): Promise<unknown> {
     const detail = error instanceof Error ? error.message : String(error);
     return {
       ok: false,
-      summary: '工具消息发送失败',
+      summary: contentT('content.toolBlock.summaries.messageFailed'),
       detail,
       error: {
         code: 'runtime_message_failed',
@@ -2562,10 +2627,10 @@ function createInvalidRuntimeToolResult(value: unknown): ToolCardResult {
     : `Background returned an invalid tool result: ${previewUnknown(value)}`;
   return {
     ok: false,
-    summary: '后台工具执行失败',
+    summary: contentT('content.toolBlock.summaries.backgroundFailed'),
     detail: missing
-      ? '后台没有返回工具执行结果。请刷新当前 DeepSeek 页面后重试；如果仍失败，在 MCP 页重新测试 Shell Local。'
-      : `后台返回的工具结果结构无效：${previewUnknown(value)}`,
+      ? contentT('content.toolBlock.missingResultDetail')
+      : contentT('content.toolBlock.invalidResultDetail', { preview: previewUnknown(value) }),
     error: {
       code: missing ? 'runtime_tool_result_missing' : 'runtime_tool_result_invalid',
       message,
@@ -2629,7 +2694,7 @@ async function requestWebFetchPermission(url: string): Promise<boolean> {
       session.timeoutId = setTimeout(() => cleanup(false), PERMISSION_BANNER_TIMEOUT_MS);
 
       grantBtn.addEventListener('click', async () => {
-        grantBtn.textContent = '请求中...';
+        grantBtn.textContent = contentT('content.permission.requesting');
         grantBtn.disabled = true;
         denyBtn.disabled = true;
         const permResult = await sendRuntimeMessage<{ ok: boolean }>({
@@ -2677,10 +2742,12 @@ function createPermissionBanner(origin: string): HTMLElement | null {
   banner.id = PERMISSION_BANNER_ID;
   banner.className = 'dpp-permission-banner';
   banner.innerHTML = `
-    <span class="dpp-permission-text">DeepSeek++ 需要访问 <strong>${escapeHtml(origin)}</strong> 的权限以获取该页面内容</span>
+    <span class="dpp-permission-text">${contentT('content.permission.webFetch', {
+      origin: `<strong>${escapeHtml(origin)}</strong>`,
+    })}</span>
     <div class="dpp-permission-actions">
-      <button type="button" class="dpp-permission-deny">拒绝</button>
-      <button type="button" class="dpp-permission-grant">授权</button>
+      <button type="button" class="dpp-permission-deny">${contentT('content.permission.deny')}</button>
+      <button type="button" class="dpp-permission-grant">${contentT('content.permission.grant')}</button>
     </div>
   `;
 
@@ -2786,7 +2853,7 @@ function escapeHtml(text: string): string {
   return div.innerHTML;
 }
 
-// --- Tool execution collapsible block (matches official "已思考" style) ---
+// --- Tool execution collapsible block, aligned with the host reasoning block style. ---
 
 function injectToolBlockStyles() {
   if (document.getElementById(TOOL_BLOCK_STYLE_ID)) return;
@@ -2968,7 +3035,7 @@ function createToolBlockShell(options?: { id?: string; restoreId?: string; colla
 function updateToolBlockContent(block: HTMLElement, executions: ToolExecutionRecord[]) {
   const count = executions.length;
   const title = block.querySelector('.dpp-tool-block-title')!;
-  title.textContent = `已执行工具（${count}次）`;
+  title.textContent = contentT('content.toolBlock.title', { count });
 
   const body = block.querySelector('.dpp-tool-block-body')!;
   body.innerHTML = '';
@@ -3041,7 +3108,7 @@ function extractReadableError(jsonText: string): string | null {
 }
 
 function formatToolExecutionName(exec: ToolExecutionRecord): string {
-  if (exec.name === 'python_exec') return 'Python 解释器';
+  if (exec.name === 'python_exec') return contentT('content.toolBlock.pythonInterpreter');
   return exec.provider?.displayName
     ? `${exec.provider.displayName} / ${exec.name}`
     : exec.name;
@@ -3194,7 +3261,7 @@ function createRestoredInlineAgentContainer(trace: InlineAgentTraceRecord): HTML
   container.setAttribute('data-dpp-agent-loop-id', trace.loopId);
 
   for (const step of [...trace.steps].sort((a, b) => a.index - b.index)) {
-    const stepEl = createAgentStepElement(step.index);
+    const stepEl = createAgentStepElement(step.index, undefined, getAgentRendererLabels());
     updateStepStreamText(stepEl, step.text);
     for (const exec of step.toolExecutions) {
       addToolResultToStep(stepEl, exec.name, exec.result.ok, exec.result.summary);
@@ -3205,11 +3272,11 @@ function createRestoredInlineAgentContainer(trace: InlineAgentTraceRecord): HTML
   }
 
   if (trace.status === 'complete') {
-    container.appendChild(createAgentFooter(trace.totalSteps, trace.totalTools, false));
+    container.appendChild(createAgentFooter(trace.totalSteps, trace.totalTools, false, undefined, getAgentRendererLabels()));
   } else if (trace.status === 'error') {
-    container.appendChild(createAgentFooter(trace.totalSteps, trace.totalTools, true, trace.error));
+    container.appendChild(createAgentFooter(trace.totalSteps, trace.totalTools, true, trace.error, getAgentRendererLabels()));
   } else if (trace.status === 'stopping') {
-    container.appendChild(createAgentFooter(trace.totalSteps, trace.totalTools, false, trace.error ?? '已停止'));
+    container.appendChild(createAgentFooter(trace.totalSteps, trace.totalTools, false, trace.error ?? contentT('content.agent.stopped'), getAgentRendererLabels()));
   }
 
   return container;
@@ -3218,12 +3285,12 @@ function createRestoredInlineAgentContainer(trace: InlineAgentTraceRecord): HTML
 function getInlineAgentStepStatusLabel(step: InlineAgentTraceStepRecord): string {
   if (step.status === 'complete') {
     return step.toolExecutions.length > 0
-      ? `完成（${step.toolExecutions.length} 个工具）`
-      : '完成';
+      ? contentT('content.agent.completeWithTools', { count: step.toolExecutions.length })
+      : contentT('content.agent.complete');
   }
-  if (step.status === 'executing_tools') return '执行工具中';
-  if (step.status === 'error') return '执行出错';
-  return 'streaming...';
+  if (step.status === 'executing_tools') return contentT('content.agent.executingTools');
+  if (step.status === 'error') return contentT('content.agent.error');
+  return contentT('content.agent.streaming');
 }
 
 function mountRestoredInlineAgentContainer(
@@ -3265,17 +3332,17 @@ function summarizeRestoredToolCall(call: ToolCall): ToolCardResult {
 
   switch (call.name) {
     case 'memory_save':
-      return { ok: true, summary: '已保存', detail };
+      return { ok: true, summary: contentT('content.toolBlock.summaries.saved'), detail };
     case 'memory_update':
-      return { ok: true, summary: '已更新', detail };
+      return { ok: true, summary: contentT('content.toolBlock.summaries.updated'), detail };
     case 'memory_delete':
-      return { ok: true, summary: '已删除', detail };
+      return { ok: true, summary: contentT('content.toolBlock.summaries.deleted'), detail };
     case 'web_search':
-      return { ok: true, summary: '已搜索', detail: String(typeof call.payload.query === 'string' ? call.payload.query : '') };
+      return { ok: true, summary: contentT('content.toolBlock.summaries.searched'), detail: String(typeof call.payload.query === 'string' ? call.payload.query : '') };
     case 'web_fetch':
-      return { ok: true, summary: '已获取', detail: String(typeof call.payload.url === 'string' ? call.payload.url : '') };
+      return { ok: true, summary: contentT('content.toolBlock.summaries.fetched'), detail: String(typeof call.payload.url === 'string' ? call.payload.url : '') };
     default:
-      return { ok: true, summary: '已执行', detail };
+      return { ok: true, summary: contentT('content.toolBlock.summaries.executed'), detail };
   }
 }
 
@@ -3745,9 +3812,9 @@ function setPetState(state: PetState) {
   applyPetState(state);
 }
 
-// 所有状态切换的唯一出口：写 dataset 并在状态真正变化时冒一句台词。
-// （updatePetFromTokenSpeed 会在流式输出时高频调用 setPetState，
-//  靠这里的变化检测避免气泡被反复重置。）
+// Single exit for state transitions: write dataset and speak only on actual changes.
+// updatePetFromTokenSpeed calls setPetState frequently during streaming, so this
+// change detection prevents repeated bubble resets.
 function applyPetState(state: PetState) {
   if (!petHostEl?.isConnected) return;
   const previous = petHostEl.dataset.state as PetState | undefined;
@@ -3795,13 +3862,13 @@ function clearPetSleepTimer() {
   }
 }
 
-// 进入某状态时冒一句台词；对会轮播的状态再排程下一句。
+// Speak once when entering a state; looping states schedule the next line.
 function triggerPetBubble(state: PetState) {
   if (!currentPetConfig?.enabled || !petHostEl?.isConnected) return;
-  if (petDragState) return; // 拖动期间保持安静
+  if (petDragState) return; // Keep quiet while dragging.
   clearPetBubbleRepeatTimer();
   petBubbleState = state;
-  showPetBubble(pickPetLine(state, petRecentLines));
+  showPetBubble(pickPetLine(state, petRecentLines, currentContentLocale));
   if (PET_BUBBLE_LOOPING_STATES.has(state)) {
     armPetBubbleRepeat();
   }
@@ -3815,8 +3882,8 @@ function armPetBubbleRepeat() {
     petBubbleRepeatTimer = null;
     const state = petBubbleState;
     if (!state || !petHostEl?.isConnected || petDragState) return;
-    if (petHostEl.dataset.state !== state) return; // 状态已变，交给新状态接管
-    showPetBubble(pickPetLine(state, petRecentLines));
+    if (petHostEl.dataset.state !== state) return; // State changed; the new state owns the loop.
+    showPetBubble(pickPetLine(state, petRecentLines, currentContentLocale));
     armPetBubbleRepeat();
   }, delay);
 }
@@ -3833,7 +3900,7 @@ function showPetBubble(line: string) {
   }, PET_BUBBLE_VISIBLE_MS);
 }
 
-// 立刻收起气泡并停止轮播（拖动 / 悬停 / 移除时调用）。
+// Hide the bubble immediately and stop rotation during drag, hover, or removal.
 function hidePetBubble() {
   clearPetBubbleRepeatTimer();
   if (petBubbleHideTimer) {
@@ -3964,7 +4031,7 @@ function handlePetPointerCancel(event: PointerEvent) {
   finishPetDrag(event);
 }
 
-// 鼠标移入宠物时收起气泡，让位给可能的悬停交互，且避免遮挡。
+// Hide bubbles on hover to avoid blocking pet interactions.
 function handlePetPointerEnter() {
   hidePetBubble();
 }
@@ -3989,7 +4056,7 @@ function finishPetDrag(event: PointerEvent) {
     void sendRuntimeMessage({ type: 'SAVE_PET', payload: config });
   }
 
-  // 拖动结束后，为会轮播的状态重新排程台词（拖动期间已被 hidePetBubble 静音）。
+  // After dragging, reschedule the current looping state because hidePetBubble paused it.
   const state = petHostEl.dataset.state as PetState | undefined;
   if (state && PET_BUBBLE_LOOPING_STATES.has(state)) {
     petBubbleState = state;

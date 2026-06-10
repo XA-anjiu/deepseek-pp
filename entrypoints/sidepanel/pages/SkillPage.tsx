@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
+import type { LocaleMessageKey, MessageParams, SupportedLocale } from '../../../core/i18n';
 import type { GitHubSkillSource, GitHubSkillUpdatePreview, Skill } from '../../../core/types';
 import GitHubSkillImportPanel from '../components/GitHubSkillImportPanel';
 import SkillCard from '../components/SkillCard';
 import SkillForm from '../components/SkillForm';
 import { requestGitHubApiPermission } from '../github-permission';
+import { useI18n } from '../i18n';
 
 interface SkillSectionProps {
   title: string;
@@ -42,6 +44,7 @@ function SkillSection({ title, skills, onEdit, onDelete, onToggleEnabled }: Skil
 }
 
 export default function SkillPage() {
+  const { t, locale } = useI18n();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [skillSources, setSkillSources] = useState<GitHubSkillSource[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -58,7 +61,7 @@ export default function SkillPage() {
     setSkillSources(sources ?? []);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [locale]);
 
   const closeForm = () => {
     setShowForm(false);
@@ -108,22 +111,22 @@ export default function SkillPage() {
   const handleCheckSource = async (source: GitHubSkillSource) => {
     setSourceActions((current) => ({
       ...current,
-      [source.id]: { status: 'checking', message: '检查中...' },
+      [source.id]: { status: 'checking', message: t('sidepanel.skillPage.checking') },
     }));
     try {
       const granted = await requestGitHubApiPermission();
-      if (!granted) throw new Error('需要 GitHub API 访问权限才能检查更新');
+      if (!granted) throw new Error(t('sidepanel.skillPage.checkPermissionError'));
       const response = await chrome.runtime.sendMessage({
         type: 'CHECK_GITHUB_SKILL_SOURCE_UPDATES',
         payload: { sourceId: source.id },
       });
-      if (response?.ok === false) throw new Error(response.error ?? '检查更新失败');
+      if (response?.ok === false) throw new Error(response.error ?? t('sidepanel.skillPage.checkFailed'));
       const update = response as GitHubSkillUpdatePreview;
       setSourceActions((current) => ({
         ...current,
         [source.id]: {
           status: 'success',
-          message: formatUpdateMessage(update),
+          message: formatUpdateMessage(update, t),
           update,
         },
       }));
@@ -142,21 +145,23 @@ export default function SkillPage() {
   const handleUpdateSource = async (source: GitHubSkillSource) => {
     setSourceActions((current) => ({
       ...current,
-      [source.id]: { status: 'updating', message: '同步中...' },
+      [source.id]: { status: 'updating', message: t('sidepanel.skillPage.syncing') },
     }));
     try {
       const granted = await requestGitHubApiPermission();
-      if (!granted) throw new Error('需要 GitHub API 访问权限才能同步更新');
+      if (!granted) throw new Error(t('sidepanel.skillPage.syncPermissionError'));
       const response = await chrome.runtime.sendMessage({
         type: 'UPDATE_GITHUB_SKILL_SOURCE',
         payload: { sourceId: source.id },
       });
-      if (response?.ok === false) throw new Error(response.error ?? '同步失败');
+      if (response?.ok === false) throw new Error(response.error ?? t('sidepanel.skillPage.syncFailed'));
       setSourceActions((current) => ({
         ...current,
         [source.id]: {
           status: 'success',
-          message: `已同步 ${(response?.imported as Skill[] | undefined)?.length ?? source.skillPaths.length} 个 Skill`,
+          message: t('sidepanel.skillPage.syncedSkills', {
+            count: (response?.imported as Skill[] | undefined)?.length ?? source.skillPaths.length,
+          }),
         },
       }));
       await load();
@@ -172,7 +177,10 @@ export default function SkillPage() {
   };
 
   const handleDeleteSource = async (source: GitHubSkillSource) => {
-    if (!confirm(`确定移除 ${source.repository} 导入的 ${source.importedSkillNames.length} 个 Skill 吗？`)) return;
+    if (!confirm(t('sidepanel.skillPage.deleteSourceConfirm', {
+      repository: source.repository,
+      count: source.importedSkillNames.length,
+    }))) return;
     await chrome.runtime.sendMessage({
       type: 'DELETE_GITHUB_SKILL_SOURCE',
       payload: { sourceId: source.id },
@@ -194,7 +202,7 @@ export default function SkillPage() {
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>
-          可用 Skill
+          {t('sidepanel.skillPage.title')}
         </h2>
         <div className="flex items-center gap-2">
           <button
@@ -213,7 +221,7 @@ export default function SkillPage() {
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
-            自定义
+            {t('sidepanel.skillPage.createCustom')}
           </button>
         </div>
       </div>
@@ -241,15 +249,15 @@ export default function SkillPage() {
       )}
 
       <SkillSection
-        title="GitHub 导入"
+        title={t('sidepanel.skillPage.sectionGithub')}
         skills={remote}
         onDelete={handleDelete}
         onToggleEnabled={handleToggleEnabled}
       />
-      <SkillSection title="内置" skills={builtin} />
-      <SkillSection title="官方" skills={official} />
+      <SkillSection title={t('sidepanel.skillPage.sectionBuiltin')} skills={builtin} />
+      <SkillSection title={t('sidepanel.skillPage.sectionOfficial')} skills={official} />
       <SkillSection
-        title="自定义"
+        title={t('sidepanel.skillPage.sectionCustom')}
         skills={custom}
         onEdit={handleEdit}
         onDelete={handleDelete}
@@ -258,13 +266,13 @@ export default function SkillPage() {
 
       <div className="ds-info-panel rounded-xl p-3.5">
         <p className="text-xs leading-relaxed" style={{ color: 'var(--ds-text-secondary)' }}>
-          在 DeepSeek 输入框中输入{' '}
+          {t('sidepanel.skillPage.usagePrefix')}{' '}
           <code className="ds-code font-mono text-[11px] px-1.5 py-0.5 rounded">
-            /skill名 参数
+            {t('sidepanel.skillPage.usageTrigger')}
           </code>{' '}
-          触发。例如：
+          {t('sidepanel.skillPage.usageSuffix')}
           <code className="ds-code font-mono text-[11px] px-1.5 py-0.5 rounded">
-            /frontend-design 做一个登录页
+            {t('sidepanel.skillPage.usageExample')}
           </code>
         </p>
       </div>
@@ -279,10 +287,12 @@ function GitHubSourceSection({ sources, actions, onCheck, onUpdate, onDelete }: 
   onUpdate: (source: GitHubSkillSource) => void;
   onDelete: (source: GitHubSkillSource) => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <section className="space-y-2">
       <h3 className="text-[11px] font-medium uppercase tracking-wider" style={{ color: 'var(--ds-text-tertiary)' }}>
-        GitHub 源
+        {t('sidepanel.skillPage.githubSourceTitle')}
       </h3>
       {sources.map((source) => (
         <GitHubSourceCard
@@ -305,6 +315,7 @@ function GitHubSourceCard({ source, action, onCheck, onUpdate, onDelete }: {
   onUpdate: () => void;
   onDelete: () => void;
 }) {
+  const { t, locale } = useI18n();
   const busy = action?.status === 'checking' || action?.status === 'updating';
   return (
     <div className="ds-surface-panel rounded-xl p-3.5 space-y-3">
@@ -314,7 +325,7 @@ function GitHubSourceCard({ source, action, onCheck, onUpdate, onDelete }: {
             {source.repository}
           </div>
           <div className="text-[11px] mt-1 truncate" style={{ color: 'var(--ds-text-tertiary)' }}>
-            {source.rootPath || 'repo root'} · {source.ref} · {shortSha(source.commitSha)}
+            {source.rootPath || t('sidepanel.skillPage.repoRoot')} · {source.ref} · {shortSha(source.commitSha)}
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -324,7 +335,7 @@ function GitHubSourceCard({ source, action, onCheck, onUpdate, onDelete }: {
             disabled={busy}
             className="ds-btn-secondary px-2 py-1 text-[11px] font-medium rounded-md disabled:opacity-40"
           >
-            检查
+            {t('sidepanel.skillPage.check')}
           </button>
           <button
             type="button"
@@ -332,7 +343,7 @@ function GitHubSourceCard({ source, action, onCheck, onUpdate, onDelete }: {
             disabled={busy}
             className="ds-btn-secondary px-2 py-1 text-[11px] font-medium rounded-md disabled:opacity-40"
           >
-            同步
+            {t('sidepanel.skillPage.sync')}
           </button>
           <button
             type="button"
@@ -340,17 +351,17 @@ function GitHubSourceCard({ source, action, onCheck, onUpdate, onDelete }: {
             disabled={busy}
             className="ds-text-btn-delete px-2 py-1 text-[11px] font-medium rounded-md disabled:opacity-40"
           >
-            移除
+            {t('sidepanel.skillPage.remove')}
           </button>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-1.5 text-[10px]" style={{ color: 'var(--ds-text-tertiary)' }}>
-        <span className="ds-tag px-1.5 py-0.5 rounded-full">{source.importedSkillNames.length} 个 Skill</span>
-        <span className="ds-tag px-1.5 py-0.5 rounded-full">{source.licenseSpdxId ?? source.licenseName ?? 'Unknown license'}</span>
+        <span className="ds-tag px-1.5 py-0.5 rounded-full">{t('sidepanel.skillPage.skillCount', { count: source.importedSkillNames.length })}</span>
+        <span className="ds-tag px-1.5 py-0.5 rounded-full">{source.licenseSpdxId ?? source.licenseName ?? t('sidepanel.skillPage.unknownLicense')}</span>
         {source.packageVersion && <span className="ds-tag px-1.5 py-0.5 rounded-full">v{source.packageVersion}</span>}
-        <span className="ds-tag px-1.5 py-0.5 rounded-full">同步 {formatTime(source.updatedAt)}</span>
-        {source.lastCheckedAt && <span className="ds-tag px-1.5 py-0.5 rounded-full">检查 {formatTime(source.lastCheckedAt)}</span>}
+        <span className="ds-tag px-1.5 py-0.5 rounded-full">{t('sidepanel.skillPage.syncedAt', { time: formatTime(source.updatedAt, locale) })}</span>
+        {source.lastCheckedAt && <span className="ds-tag px-1.5 py-0.5 rounded-full">{t('sidepanel.skillPage.checkedAt', { time: formatTime(source.lastCheckedAt, locale) })}</span>}
       </div>
 
       {action && (
@@ -369,21 +380,30 @@ function GitHubSourceCard({ source, action, onCheck, onUpdate, onDelete }: {
   );
 }
 
-function formatUpdateMessage(update: GitHubSkillUpdatePreview): string {
-  if (!update.hasUpdates) return '上游没有发现更新';
+function formatUpdateMessage(
+  update: GitHubSkillUpdatePreview,
+  t: (key: LocaleMessageKey, params?: MessageParams) => string,
+): string {
+  if (!update.hasUpdates) return t('sidepanel.skillPage.noUpdates');
   const parts: string[] = [];
-  if (update.changedPaths.length > 0) parts.push(`${update.changedPaths.length} 个已导入 Skill 可能有更新`);
-  if (update.newPaths.length > 0) parts.push(`${update.newPaths.length} 个新增 Skill`);
-  if (update.missingPaths.length > 0) parts.push(`${update.missingPaths.length} 个已导入 Skill 在上游消失`);
-  return parts.join('，') || '发现上游更新';
+  if (update.changedPaths.length > 0) {
+    parts.push(t('sidepanel.skillPage.changedUpdates', { count: update.changedPaths.length }));
+  }
+  if (update.newPaths.length > 0) {
+    parts.push(t('sidepanel.skillPage.newSkills', { count: update.newPaths.length }));
+  }
+  if (update.missingPaths.length > 0) {
+    parts.push(t('sidepanel.skillPage.missingSkills', { count: update.missingPaths.length }));
+  }
+  return parts.join('，') || t('sidepanel.skillPage.updatesFound');
 }
 
 function shortSha(sha: string): string {
   return sha.slice(0, 7);
 }
 
-function formatTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleString('zh-CN', {
+function formatTime(timestamp: number, locale: SupportedLocale): string {
+  return new Date(timestamp).toLocaleString(locale, {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
