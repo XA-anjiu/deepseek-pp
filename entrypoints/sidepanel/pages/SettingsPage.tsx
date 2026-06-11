@@ -14,7 +14,9 @@ import type { BackgroundConfig, Memory, PetConfig, PetPosition, SyncConfig, Sync
 import { SVG_PATHS } from '../constants';
 import { getChatEnabled, setChatEnabled } from '../../../core/chat/store';
 import { validateImportedMemory } from '../../../core/sync/schema';
+import PromptControlPanel from '../components/PromptControlPanel';
 import ScenarioManager from '../components/ScenarioManager';
+import VoiceSettingsPanel from '../components/VoiceSettingsPanel';
 import { useI18n } from '../i18n';
 
 const DEFAULT_SYNC_CONFIG: SyncConfig = {
@@ -370,6 +372,7 @@ export default function SettingsPage() {
       presets: counts.presets,
       projects: counts.projects,
       projectFiles: counts.projectFiles,
+      savedItems: counts.savedItems,
     });
   };
 
@@ -649,6 +652,10 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
+
+      <PromptControlPanel />
+
+      <VoiceSettingsPanel />
 
       <section className="space-y-3">
         <h2 className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>

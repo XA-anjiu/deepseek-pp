@@ -45,8 +45,10 @@ import {
   parseValidatedArray,
   parseValidatedJson,
   validateGitHubSkillSource,
+  validateImportedMemory,
   validatePreset,
   validateProjectContextState,
+  validateSavedItemsState,
   validateSkill,
   validateStoredMemory,
 } from '../core/sync/schema';
@@ -56,6 +58,7 @@ import {
   getRuntimeToolDescriptors,
   refreshRuntimeToolDescriptors,
 } from '../core/tool/runtime';
+import { filterSidepanelChatToolDescriptors } from '../core/tool/sidepanel';
 import {
   addProjectFiles,
   createProjectContext,
@@ -69,6 +72,24 @@ import {
   setActiveProjectFiles,
 } from '../core/project';
 import { getArtifact } from '../core/artifact';
+import {
+  deleteSavedItem,
+  getAllSavedItems,
+  getSavedItemsState,
+  replaceAllSavedItems,
+  saveSavedItem,
+} from '../core/saved-items';
+import {
+  getPromptInjectionSettings,
+  savePromptInjectionSettings,
+  shouldInjectPresetForTurn,
+} from '../core/prompt/settings';
+import {
+  detectVoiceCapabilities,
+  getVoiceSettings,
+  saveVoiceSettings,
+} from '../core/voice/settings';
+import type { SandboxRunRequest } from '../core/sandbox';
 import { getCurrentBrowserExtensionEnvironment } from '../core/platform';
 import {
   createMcpServer,
@@ -139,7 +160,7 @@ import {
   watchLocalePreference,
 } from '../core/i18n/store';
 import type { WebSearchToolName } from '../core/tool/web-search';
-import type { BackgroundConfig, DeepSeekTheme, GitHubSkillImportRequest, GitHubSkillSource, Memory, ModelType, NewMemory, PetConfig, ProjectContextState, Skill, SyncConfig, SyncCounts, SystemPromptPreset, ToolCall, ToolDescriptor, ToolExecutionRecord, ToolResult } from '../core/types';
+import type { BackgroundConfig, DeepSeekTheme, GitHubSkillImportRequest, GitHubSkillSource, Memory, ModelType, NewMemory, PetConfig, ProjectContextState, SavedItemInput, Skill, SyncConfig, SyncCounts, SystemPromptPreset, ToolCall, ToolDescriptor, ToolExecutionRecord, ToolResult } from '../core/types';
 import type { McpServerCreateInput, McpServerUpdateInput } from '../core/mcp/types';
 import type { AutomationCreateInput, AutomationRunnerRequest, AutomationRunnerResult, AutomationStatus, AutomationUpdateInput } from '../core/automation/types';
 import type { ConversationExportProgress, ConversationExportResult } from '../core/export/types';
@@ -173,6 +194,7 @@ type SyncDataSnapshot = {
   skillSources: GitHubSkillSource[];
   presets: SystemPromptPreset[];
   projectContext: ProjectContextState | null;
+  savedItems: Awaited<ReturnType<typeof getSavedItemsState>> | null;
 };
 
 export default defineBackground(() => {
@@ -382,6 +404,26 @@ async function handleMessage(
       return { id };
     }
 
+    case 'IMPORT_MEMORY_DRAFTS': {
+      const { memories } = message.payload as { memories?: NewMemory[] };
+      if (!Array.isArray(memories)) return { ok: false, error: 'invalid_memories' };
+      let validatedMemories: NewMemory[];
+      try {
+        validatedMemories = memories.map((memory, index) => validateImportedMemory(memory, `memories[${index}]`));
+      } catch (error) {
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : 'invalid_memories',
+        };
+      }
+      const ids: number[] = [];
+      for (const memory of validatedMemories) {
+        ids.push(await saveMemory(memory));
+      }
+      await broadcastStateUpdate(sender.tab?.id);
+      return { ok: true, ids, count: ids.length };
+    }
+
     case 'UPDATE_MEMORY': {
       await updateMemory(message.payload as Memory);
       await broadcastStateUpdate(sender.tab?.id);
@@ -487,6 +529,43 @@ async function handleMessage(
 
     case 'GET_ACTIVE_PRESET':
       return getActivePreset();
+
+    case 'GET_PROMPT_INJECTION_SETTINGS':
+      return getPromptInjectionSettings();
+
+    case 'SAVE_PROMPT_INJECTION_SETTINGS': {
+      const settings = await savePromptInjectionSettings(message.payload as Parameters<typeof savePromptInjectionSettings>[0]);
+      await broadcastStateUpdate(sender.tab?.id);
+      return settings;
+    }
+
+    case 'GET_SAVED_ITEMS':
+      return getAllSavedItems();
+
+    case 'SAVE_SAVED_ITEM': {
+      const item = await saveSavedItem(message.payload as SavedItemInput);
+      await broadcastSavedItemsUpdate(sender.tab?.id);
+      return item;
+    }
+
+    case 'DELETE_SAVED_ITEM': {
+      const { id } = message.payload as { id: string };
+      await deleteSavedItem(id);
+      await broadcastSavedItemsUpdate(sender.tab?.id);
+      return { ok: true };
+    }
+
+    case 'GET_VOICE_SETTINGS':
+      return getVoiceSettings();
+
+    case 'SAVE_VOICE_SETTINGS': {
+      const settings = await saveVoiceSettings(message.payload as Parameters<typeof saveVoiceSettings>[0]);
+      await broadcastVoiceSettingsUpdate(sender.tab?.id);
+      return settings;
+    }
+
+    case 'GET_VOICE_CAPABILITIES':
+      return detectVoiceCapabilities();
 
     case 'GET_MCP_SERVERS':
       return getAllMcpServers();
@@ -626,6 +705,9 @@ async function handleMessage(
       await broadcastToolCallHistoryUpdate(sender.tab?.id);
       return result;
     }
+
+    case 'RUN_APPROVED_SANDBOX':
+      return runApprovedSandbox(message.payload as SandboxRunRequest);
 
     case 'GET_TOOL_CALL_HISTORY': {
       const { limit } = (message.payload as { limit?: number } | undefined) ?? {};
@@ -821,12 +903,16 @@ async function handleMessage(
       if (snapshot.projectContext) {
         replacements.push(saveProjectContextState(snapshot.projectContext));
       }
+      if (snapshot.savedItems) {
+        replacements.push(replaceAllSavedItems(snapshot.savedItems.items));
+      }
       await Promise.all(replacements);
 
       const now = Date.now();
       await saveSyncConfig({ ...config, lastSyncAt: now });
       await broadcastStateUpdate(sender.tab?.id);
       if (snapshot.projectContext) await broadcastProjectContextUpdate(sender.tab?.id);
+      if (snapshot.savedItems) await broadcastSavedItemsUpdate(sender.tab?.id);
       return { ok: true, lastSyncAt: now, counts: getSyncCounts(snapshot) };
     }
 
@@ -984,13 +1070,14 @@ async function getDeepSeekTabsForAuthRefresh(preferredTabId?: number): Promise<c
 }
 
 async function broadcastStateUpdate(excludeTabId?: number) {
-  const [memories, skills, activePreset, modelType] = await Promise.all([
+  const [memories, skills, activePreset, modelType, promptSettings] = await Promise.all([
     getAllMemories(),
     getAllSkills({ locale: currentBackgroundLocale }),
     getActivePreset(),
     getModelType(),
+    getPromptInjectionSettings(),
   ]);
-  await broadcastToTabs({ type: 'STATE_UPDATED', memories, skills, activePreset, modelType }, excludeTabId);
+  await broadcastToTabs({ type: 'STATE_UPDATED', memories, skills, activePreset, modelType, promptSettings }, excludeTabId);
 }
 
 async function broadcastBackgroundUpdate(config: BackgroundConfig | null) {
@@ -1022,6 +1109,16 @@ async function broadcastToolCallHistoryUpdate(excludeTabId?: number) {
 async function broadcastProjectContextUpdate(excludeTabId?: number) {
   const state = await getProjectContextState();
   await broadcastToTabs({ type: 'PROJECT_CONTEXT_UPDATED', state }, excludeTabId);
+}
+
+async function broadcastSavedItemsUpdate(excludeTabId?: number) {
+  const savedItems = await getAllSavedItems();
+  await broadcastToTabs({ type: 'SAVED_ITEMS_UPDATED', savedItems }, excludeTabId);
+}
+
+async function broadcastVoiceSettingsUpdate(excludeTabId?: number) {
+  const voiceSettings = await getVoiceSettings();
+  await broadcastToTabs({ type: 'VOICE_SETTINGS_UPDATED', voiceSettings }, excludeTabId);
 }
 
 async function broadcastAutomationUpdate(excludeTabId?: number) {
@@ -1065,6 +1162,48 @@ async function broadcastConversationExportProgress(
   excludeTabId?: number,
 ) {
   await broadcastToTabs({ type: 'DEEPSEEK_EXPORT_PROGRESS', progress }, excludeTabId);
+}
+
+async function runApprovedSandbox(request: SandboxRunRequest): Promise<ToolResult> {
+  if (request.language !== 'python') {
+    return {
+      ok: false,
+      summary: backgroundT('tool.sandbox.unsupportedApprovedLanguage'),
+      detail: request.language,
+      error: {
+        code: 'sandbox_language_not_background_executable',
+        message: `Use the browser sandbox card to run ${request.language}.`,
+        retryable: false,
+      },
+    };
+  }
+
+  const descriptors = await getRuntimeToolDescriptors(currentBackgroundLocale);
+  const descriptor = descriptors.find((tool) => tool.name === 'python_exec');
+  if (!descriptor) {
+    return {
+      ok: false,
+      summary: backgroundT('tool.sandbox.pythonUnavailable'),
+      detail: backgroundT('tool.sandbox.pythonUnavailableDetail'),
+      error: {
+        code: 'python_exec_unavailable',
+        message: 'python_exec is not enabled or not available.',
+        retryable: false,
+      },
+    };
+  }
+
+  return executeRuntimeToolCall({
+    name: descriptor.name,
+    invocationName: descriptor.invocationName,
+    descriptorId: descriptor.id,
+    provider: descriptor.provider,
+    payload: {
+      code: request.code,
+      timeout_ms: request.timeoutMs,
+    },
+    raw: '<sandbox-approved-python>',
+  }, 'manual_chat', currentBackgroundLocale);
 }
 
 async function handleConversationExport(
@@ -1233,12 +1372,13 @@ function isAutomationStatus(status: unknown): status is AutomationStatus {
 }
 
 async function getLocalSyncDataSnapshot(): Promise<SyncDataSnapshot> {
-  const [memories, userSkills, skillSources, presets, projectContext] = await Promise.all([
+  const [memories, userSkills, skillSources, presets, projectContext, savedItems] = await Promise.all([
     getAllMemories(),
     getUserSkills(),
     getAllSkillSources(),
     getAllPresets(),
     getProjectContextState(),
+    getSavedItemsState(),
   ]);
 
   return {
@@ -1247,6 +1387,7 @@ async function getLocalSyncDataSnapshot(): Promise<SyncDataSnapshot> {
     skillSources,
     presets,
     projectContext,
+    savedItems,
   };
 }
 
@@ -1259,16 +1400,20 @@ async function uploadSyncDataSnapshot(config: SyncConfig, snapshot: SyncDataSnap
     snapshot.projectContext
       ? webdavPut(config, 'project-context.json', JSON.stringify(snapshot.projectContext))
       : Promise.resolve(),
+    snapshot.savedItems
+      ? webdavPut(config, 'saved-items.json', JSON.stringify(snapshot.savedItems))
+      : Promise.resolve(),
   ]);
 }
 
 async function getRemoteSyncDataSnapshot(config: SyncConfig): Promise<SyncDataSnapshot> {
-  const [remoteMemJson, remoteSkillJson, remotePresetJson, remoteSkillSourceJson, remoteProjectContextJson] = await Promise.all([
+  const [remoteMemJson, remoteSkillJson, remotePresetJson, remoteSkillSourceJson, remoteProjectContextJson, remoteSavedItemsJson] = await Promise.all([
     webdavGetRequired(config, 'memories.json'),
     webdavGetRequired(config, 'skills.json'),
     webdavGetRequired(config, 'presets.json'),
     webdavGet(config, 'skill-sources.json'),
     webdavGet(config, 'project-context.json'),
+    webdavGet(config, 'saved-items.json'),
   ]);
 
   const memories = parseValidatedArray('memories.json', remoteMemJson, (item, path) => {
@@ -1287,6 +1432,9 @@ async function getRemoteSyncDataSnapshot(config: SyncConfig): Promise<SyncDataSn
     projectContext: remoteProjectContextJson === null
       ? null
       : parseValidatedJson('project-context.json', remoteProjectContextJson, validateProjectContextState),
+    savedItems: remoteSavedItemsJson === null
+      ? null
+      : parseValidatedJson('saved-items.json', remoteSavedItemsJson, validateSavedItemsState),
   };
 }
 
@@ -1305,6 +1453,7 @@ function getSyncCounts(snapshot: SyncDataSnapshot): SyncCounts {
     presets: snapshot.presets.length,
     projects: snapshot.projectContext?.projects.length ?? 0,
     projectFiles: snapshot.projectContext?.files.length ?? 0,
+    savedItems: snapshot.savedItems?.items.length ?? 0,
   };
 }
 
@@ -1393,14 +1542,24 @@ async function buildSidepanelPrompt(prompt: string): Promise<{
     getActivePreset(),
     getRuntimeToolDescriptors(currentBackgroundLocale),
   ]);
+  const promptSettings = await getPromptInjectionSettings();
+  const shouldInjectPreset = shouldInjectPresetForTurn({
+    hasActivePreset: Boolean(activePreset),
+    isFirstMessage: chatSessionId === null && officialApiChatMessages.length === 0,
+    messageCount: officialApiChatMessages.length + 1,
+    cadence: promptSettings.presetCadence,
+  });
 
-  const enabledDescriptors = toolDescriptors.filter((t) => t.execution.enabled);
+  const enabledDescriptors = filterSidepanelChatToolDescriptors(toolDescriptors);
   const { augmented } = buildPromptAugmentation(prompt, {
     memories,
-    presetContent: activePreset?.content ?? null,
+    presetContent: shouldInjectPreset ? activePreset?.content ?? null : null,
     toolDescriptors: enabledDescriptors,
     thinkingEnabled: false,
     locale: currentBackgroundLocale,
+    memoryEnabled: promptSettings.memoryEnabled,
+    systemPromptEnabled: promptSettings.systemPromptEnabled,
+    forceResponseLanguage: promptSettings.forceResponseLanguage === 'auto' ? null : promptSettings.forceResponseLanguage,
   });
 
   return { augmented, enabledDescriptors };

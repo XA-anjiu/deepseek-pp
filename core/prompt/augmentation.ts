@@ -20,6 +20,9 @@ export interface PromptAugmentationOptions {
   projectContext?: string | null;
   toolDescriptors?: readonly ToolDescriptor[];
   locale?: SupportedLocale;
+  memoryEnabled?: boolean;
+  systemPromptEnabled?: boolean;
+  forceResponseLanguage?: SupportedLocale | null;
 }
 
 export interface PromptAugmentationResult {
@@ -39,37 +42,63 @@ export function buildPromptAugmentation(
     presetContent = null,
     projectContext = null,
     locale = DEFAULT_LOCALE,
+    memoryEnabled = true,
+    systemPromptEnabled = true,
+    forceResponseLanguage = null,
   } = options ?? {};
   const toolDescriptors = options?.toolDescriptors ?? createDefaultToolDescriptors(locale);
 
   const promptTokens = estimateTokens(originalPrompt);
   const budget = getMemoryBudget(promptTokens);
-  const selected = selectMemories(originalPrompt, [...memories], { budget, identityOnly });
-  const memBlock = formatMemoriesBlock(selected, locale);
-  const toolsBlock = renderToolSchemas(toolDescriptors, locale);
-  const baseSystem = translate(
-    locale,
-    thinkingEnabled ? 'prompt.systemThinking' : 'prompt.systemChat',
-    { memories: memBlock, tools: toolsBlock },
-  );
+  const selected = memoryEnabled
+    ? selectMemories(originalPrompt, [...memories], { budget, identityOnly })
+    : [];
+  const memBlock = memoryEnabled
+    ? formatMemoriesBlock(selected, locale)
+    : translate(locale, 'prompt.memoryDisabled');
+  const toolsBlock = systemPromptEnabled ? renderToolSchemas(toolDescriptors, locale) : '';
+  const baseSystem = systemPromptEnabled
+    ? translate(
+      locale,
+      thinkingEnabled ? 'prompt.systemThinking' : 'prompt.systemChat',
+      { memories: memBlock, tools: toolsBlock },
+    )
+    : '';
+  const standaloneMemories = !systemPromptEnabled && memoryEnabled
+    ? translate(locale, 'prompt.standaloneMemories', { memories: memBlock })
+    : '';
   const system = [
     baseSystem,
+    standaloneMemories,
     renderProjectContext(projectContext),
-    renderWebSearchGuidance(toolDescriptors, locale),
+    systemPromptEnabled ? renderWebSearchGuidance(toolDescriptors, locale) : '',
+    renderForcedResponseLanguage(forceResponseLanguage, locale),
   ].filter(Boolean).join('\n\n');
   const presetPrefix = presetContent ? `${presetContent}\n\n---\n\n` : '';
-  const toolReminder = renderToolFormatReminder(toolDescriptors, locale);
+  const toolReminder = systemPromptEnabled ? renderToolFormatReminder(toolDescriptors, locale) : '';
+  const systemPrefix = system ? `${system}\n\n` : '';
 
   return {
-    augmented: presetPrefix + system + markVisibleUserPrompt(originalPrompt) + toolReminder,
+    augmented: presetPrefix + systemPrefix + markVisibleUserPrompt(originalPrompt) + toolReminder,
     usedMemoryIds: selected.map((memory) => memory.id!).filter(Boolean),
-    renderedToolCount: toolDescriptors.length,
+    renderedToolCount: systemPromptEnabled ? toolDescriptors.length : 0,
   };
 }
 
 function renderProjectContext(projectContext?: string | null): string {
   const trimmed = typeof projectContext === 'string' ? projectContext.trim() : '';
   return trimmed;
+}
+
+function renderForcedResponseLanguage(
+  forceResponseLanguage: SupportedLocale | null,
+  locale: SupportedLocale,
+): string {
+  if (!forceResponseLanguage) return '';
+  const language = forceResponseLanguage === 'en'
+    ? translate(locale, 'prompt.responseLanguageEnglish')
+    : translate(locale, 'prompt.responseLanguageChinese');
+  return translate(locale, 'prompt.forceResponseLanguage', { language });
 }
 
 export function renderToolSchemas(

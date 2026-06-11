@@ -54,12 +54,12 @@
 | T3.3 | #165 | Implement Android bridge for storage, downloads, file/folder picking, theme, and locale | implemented locally |
 | T3.4 | #166 | Add Android capability gating for native messaging, Shell, sidePanel-only UI, and unsupported browser APIs | implemented locally |
 | T3.5 | #167 | Add Android test/CI documentation and smoke commands | open |
-| T4.1 | #168 | Add user-approved browser sandbox code runner for JS/TS/Python where available | open |
-| T4.2 | #169 | Add optional voice input and response read-aloud | open |
-| T4.3 | #170 | Add AI-assisted Skill creator tool with review-before-save | open |
-| T4.4 | #171 | Add memory import from another AI workflow | open |
-| T4.5 | #172 | Add saved items, bookmarks, and snippets with prompt insertion | open |
-| T4.6 | #173 | Add prompt injection controls: disable memory/system prompt, preset cadence, force response language | open |
+| T4.1 | #168 | Add user-approved browser sandbox code runner for JS/TS/Python where available | implemented locally |
+| T4.2 | #169 | Add optional voice input and response read-aloud | implemented locally |
+| T4.3 | #170 | Add AI-assisted Skill creator tool with review-before-save | implemented locally |
+| T4.4 | #171 | Add memory import from another AI workflow | implemented locally |
+| T4.5 | #172 | Add saved items, bookmarks, and snippets with prompt insertion | implemented locally |
+| T4.6 | #173 | Add prompt injection controls: disable memory/system prompt, preset cadence, force response language | implemented locally |
 | T5.1 | #174 | Add chat tags, filtering, and history search adapters for DeepSeek sidebar | open |
 | T5.2 | #175 | Extend export to message-level, saved-item, and image outputs | open |
 | T5.3 | #176 | Add API playground behind explicit developer/user setting | open |
@@ -94,14 +94,14 @@ gh issue list -R zhu1090093659/deepseek-pp \
 - [x] Phase 1: Foundation Contracts and Seams (local P0 4/4 implemented; T1.5 remains P1) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/31)
 - [x] Phase 2: P0 Project Context and Artifact Delivery (local 6/6 implemented) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/32)
 - [x] Phase 3: Android WebView Baseline (local P0 4/4 implemented; APK validation blocked by missing JDK; T3.5 remains P1 docs/CI) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/33)
-- [ ] Phase 4: P1 Interactive Agent Tools (0/6 tasks) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/34)
+- [x] Phase 4: P1 Interactive Agent Tools (local 6/6 implemented; GitHub Issues remain open until commit/push reconciliation) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/34)
 - [ ] Phase 5: P2 Organization, Export, and Product Surfaces (0/5 tasks) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/35)
 - [ ] Phase 6: Hardening, Documentation, and Release Readiness (0/3 tasks) — [milestone](https://github.com/zhu1090093659/deepseek-pp/milestone/36)
 
 ## Current Status
 
-**Active Phase**: P0 local implementation complete; next user-requested pass should start P1.
-**Active Task**: Next pass begins with Phase 4 / T4.1 (#168) unless the user asks to reconcile/commit P0 first.
+**Active Phase**: P1 local implementation complete; next user-requested pass should start Phase 5 or reconcile/commit local P0/P1 first.
+**Active Task**: Next pass begins with Phase 5 / T5.1 (#174) unless the user asks to reconcile/commit P0/P1 first.
 **Blockers**: Android APK/Gradle validation is blocked on this machine because `java -version` reports no Java Runtime. `npm run android:assemble:debug` stops at the explicit JDK check.
 
 ## Latest P0 Validation
@@ -122,6 +122,20 @@ gh issue list -R zhu1090093659/deepseek-pp \
 | `npm run verify:manifest-policy` | pass | Manifest policy check pass |
 | `npm run audit:prod` | pass | 0 high production vulnerabilities |
 | `npm run android:assemble:debug` | blocked | Missing local JDK; APK not built |
+| `git diff --check` | pass | No whitespace errors |
+
+## Latest P1 Validation
+
+| Command | Result | Notes |
+|:--|:--|:--|
+| `npx vitest run tests/p1-interactive-tools.test.ts tests/request-augmentation.test.ts tests/sync-schema.test.ts tests/tool-result-renderer.test.ts` | pass | 4 test files, 22 tests |
+| `npm run compile` | pass | TypeScript contracts compile |
+| `npm test` | pass | 19 test files, 96 tests |
+| `npm run prompt:freeze` | pass | Updated hash for intentional prompt controls and prompt locale changes |
+| `npm run verify:i18n` | pass | Locale parity and hardcoded Chinese audit pass |
+| `npm run verify:automation` | pass | Automation contract smoke pass |
+| `npm run verify:manifest-policy` | pass | Manifest policy check pass |
+| `npm run build:all` | pass | Chrome, Edge, Firefox MV3 builds pass |
 | `git diff --check` | pass | No whitespace errors |
 
 ## Governance Status
@@ -145,9 +159,9 @@ Per-task telemetry should be written to the corresponding GitHub Issue as commen
 
 ## Next Steps
 
-1. Reconcile/commit P0 local implementation when ready.
+1. Reconcile/commit P0/P1 local implementation when ready.
 2. Install a local JDK before claiming Android APK validation.
-3. Continue with P1 tasks in Phase 4, starting from T4.1 (#168).
+3. Continue with Phase 5 tasks, starting from T5.1 (#174).
 
 ## Session Log
 
@@ -155,3 +169,4 @@ Per-task telemetry should be written to the corresponding GitHub Issue as commen
 |:--|:--|:--|
 | 2026-06-11 | Planning | Archived completed multilingual runtime support artifacts, analyzed DeepSeek++ and Better DeepSeek, wrote analysis and plan docs, created GitHub Milestones #31-#36 and Issues #152-#181, and initialized this progress tracker. |
 | 2026-06-11 | P0 implementation | Implemented platform contracts, bridge schemas, prompt project-context ordering, renderer registry, Project Context/RAG, artifact file/zip tools, Projects UI, Android WebView scaffold, Android asset staging scripts, and capability gating. Validation passed except Android APK build, which is blocked by missing local JDK. |
+| 2026-06-11 | P1 implementation | Implemented sandbox approval cards, browser/Python sandbox handoff, voice settings and sidepanel speech controls, Skill draft review cards, memory import preview with per-item rejection, saved snippets/bookmarks, prompt injection controls, saved-item sync boundaries, and P1 tests. TypeScript compile and all Vitest tests passed. |

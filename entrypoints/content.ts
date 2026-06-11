@@ -5,6 +5,7 @@ import type {
   ModelType,
   PetConfig,
   PetCustomPosition,
+  PromptInjectionSettings,
   Skill,
   SystemPromptPreset,
   ToolCall,
@@ -16,6 +17,7 @@ import type {
 import { normalizePetConfig } from '../core/pet/config';
 import { pickPetLine, type PetState } from '../core/pet/lines';
 import { createDefaultToolDescriptors, createToolInvocationCatalog } from '../core/tool/invocation';
+import { DEFAULT_PROMPT_INJECTION_SETTINGS, normalizePromptInjectionSettings } from '../core/prompt/settings';
 import { normalizeBackgroundConfig } from '../core/background/config';
 import { stripToolCalls } from '../core/interceptor/tool-parser';
 import { augmentRequestBody } from '../core/interceptor/request-augmentation';
@@ -205,6 +207,7 @@ let currentMemories: Memory[] = [];
 let currentSkills: Skill[] = [];
 let currentActivePreset: SystemPromptPreset | null = null;
 let currentModelType: ModelType = null;
+let currentPromptSettings: PromptInjectionSettings = DEFAULT_PROMPT_INJECTION_SETTINGS;
 let currentContentLocale: SupportedLocale = DEFAULT_LOCALE;
 let currentContentTranslator = createTranslator(DEFAULT_LOCALE);
 let currentToolDescriptors: ToolDescriptor[] = [...createDefaultToolDescriptors(currentContentLocale)];
@@ -347,12 +350,19 @@ export default defineContentScript({
 
     addRuntimeMessageListener((message, _sender, sendResponse) => {
       if (message.type === 'STATE_UPDATED') {
-        syncToMainWorld(message.memories, message.skills, message.activePreset, message.modelType, currentToolDescriptors);
+        syncToMainWorld(
+          message.memories,
+          message.skills,
+          message.activePreset,
+          message.modelType,
+          currentToolDescriptors,
+          normalizePromptInjectionSettings(message.promptSettings),
+        );
       } else if (message.type === 'TOOL_DESCRIPTORS_UPDATED') {
-        syncToMainWorld(currentMemories, currentSkills, currentActivePreset, currentModelType, normalizeToolDescriptors(message.toolDescriptors));
+        syncToMainWorld(currentMemories, currentSkills, currentActivePreset, currentModelType, normalizeToolDescriptors(message.toolDescriptors), currentPromptSettings);
       } else if (message.type === 'MCP_SERVERS_UPDATED') {
         sendRuntimeMessage<ToolDescriptor[]>({ type: 'GET_TOOL_DESCRIPTORS' })
-          .then((descriptors) => syncToMainWorld(currentMemories, currentSkills, currentActivePreset, currentModelType, normalizeToolDescriptors(descriptors)))
+          .then((descriptors) => syncToMainWorld(currentMemories, currentSkills, currentActivePreset, currentModelType, normalizeToolDescriptors(descriptors), currentPromptSettings))
           .catch(() => undefined);
       } else if (message.type === 'BACKGROUND_UPDATED') {
         applyBackground(message.config as BackgroundConfig | null);
@@ -444,6 +454,7 @@ async function handleAugmentRequestBody(data: { id?: unknown; body?: unknown }):
       toolDescriptors: currentToolDescriptors,
       messageCount: currentRequestMessageCount,
       locale: currentContentLocale,
+      promptSettings: currentPromptSettings,
     });
 
     if (result) {
@@ -503,15 +514,23 @@ function flushMainWorldMessages(): void {
 }
 
 async function loadAndSyncRuntimeState() {
-  const [memories, skills, activePreset, modelType, toolDescriptors] = await Promise.all([
+  const [memories, skills, activePreset, modelType, toolDescriptors, promptSettings] = await Promise.all([
     sendRuntimeMessage<Memory[]>({ type: 'GET_MEMORIES' }),
     sendRuntimeMessage<Skill[]>({ type: 'GET_SKILLS' }),
     sendRuntimeMessage<SystemPromptPreset | null>({ type: 'GET_ACTIVE_PRESET' }),
     sendRuntimeMessage<ModelType>({ type: 'GET_MODEL_TYPE' }),
     sendRuntimeMessage<ToolDescriptor[]>({ type: 'GET_TOOL_DESCRIPTORS' }),
+    sendRuntimeMessage<PromptInjectionSettings>({ type: 'GET_PROMPT_INJECTION_SETTINGS' }),
   ]);
 
-  syncToMainWorld(memories ?? [], skills ?? [], activePreset ?? null, modelType ?? null, normalizeToolDescriptors(toolDescriptors));
+  syncToMainWorld(
+    memories ?? [],
+    skills ?? [],
+    activePreset ?? null,
+    modelType ?? null,
+    normalizeToolDescriptors(toolDescriptors),
+    normalizePromptInjectionSettings(promptSettings),
+  );
 }
 
 function hasLiveExtensionContext(): boolean {
@@ -2222,12 +2241,14 @@ function syncToMainWorld(
   activePreset: SystemPromptPreset | null,
   modelType: ModelType,
   toolDescriptors: ToolDescriptor[],
+  promptSettings: PromptInjectionSettings = currentPromptSettings,
 ) {
   currentMemories = memories;
   currentSkills = skills;
   currentActivePreset = activePreset;
   currentModelType = modelType;
   currentToolDescriptors = toolDescriptors;
+  currentPromptSettings = normalizePromptInjectionSettings(promptSettings);
   toolOpenTagRe = buildToolOpenTagRegex(toolDescriptors);
   toolMarkerRe = buildToolMarkerRegex(toolDescriptors);
 

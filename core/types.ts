@@ -8,6 +8,12 @@ import type {
   ProjectContextState,
   ProjectFileInput,
 } from './project/types';
+import type { PromptInjectionSettings as PromptInjectionSettingsType } from './prompt/settings';
+import type { SandboxRunRequest as SandboxRunRequestType } from './sandbox/types';
+import type {
+  SavedItemInput,
+} from './saved-items/types';
+import type { VoiceSettings as VoiceSettingsType } from './voice/settings';
 import type {
   ToolCall as GenericToolCall,
   ToolPayload,
@@ -77,6 +83,31 @@ export type {
   ArtifactOutput,
   ArtifactRecord,
 } from './artifact/types';
+
+export type {
+  PromptInjectionSettings,
+  PromptPresetCadence,
+  ForcedResponseLanguage,
+} from './prompt/settings';
+
+export type {
+  SavedItem,
+  SavedItemInput,
+  SavedItemKind,
+  SavedItemsState,
+} from './saved-items/types';
+
+export type {
+  VoiceCapabilityState,
+  VoiceSettings,
+} from './voice/settings';
+
+export type {
+  SandboxApprovalOutput,
+  SandboxExecutionResult,
+  SandboxLanguage,
+  SandboxRunRequest,
+} from './sandbox/types';
 
 export type {
   PlatformCapability,
@@ -157,6 +188,7 @@ export interface SyncCounts {
   presets: number;
   projects: number;
   projectFiles: number;
+  savedItems: number;
 }
 
 export type SkillSource = 'builtin' | 'official' | 'custom' | 'remote';
@@ -339,6 +371,7 @@ export type MessageAction =
   | { type: 'UPDATE_GITHUB_SKILL_SOURCE'; payload: { sourceId: string } }
   | { type: 'DELETE_GITHUB_SKILL_SOURCE'; payload: { sourceId: string } }
   | { type: 'SAVE_MEMORY'; payload: NewMemory }
+  | { type: 'IMPORT_MEMORY_DRAFTS'; payload: { memories: NewMemory[] } }
   | { type: 'DELETE_MEMORY'; payload: { id: number } }
   | { type: 'UPDATE_MEMORY'; payload: Memory }
   | { type: 'SAVE_SKILL'; payload: SaveSkillPayload }
@@ -349,6 +382,14 @@ export type MessageAction =
   | { type: 'DELETE_PRESET'; payload: { id: string } }
   | { type: 'SET_ACTIVE_PRESET'; payload: { id: string | null } }
   | { type: 'GET_ACTIVE_PRESET' }
+  | { type: 'GET_PROMPT_INJECTION_SETTINGS' }
+  | { type: 'SAVE_PROMPT_INJECTION_SETTINGS'; payload: Partial<PromptInjectionSettingsType> }
+  | { type: 'GET_SAVED_ITEMS' }
+  | { type: 'SAVE_SAVED_ITEM'; payload: SavedItemInput }
+  | { type: 'DELETE_SAVED_ITEM'; payload: { id: string } }
+  | { type: 'GET_VOICE_SETTINGS' }
+  | { type: 'SAVE_VOICE_SETTINGS'; payload: Partial<VoiceSettingsType> }
+  | { type: 'GET_VOICE_CAPABILITIES' }
   | { type: 'GET_MCP_SERVERS' }
   | { type: 'GET_MCP_SERVER'; payload: { id: McpServerId } }
   | { type: 'CREATE_MCP_SERVER'; payload: McpServerCreateInput }
@@ -359,6 +400,7 @@ export type MessageAction =
   | { type: 'GET_TOOL_DESCRIPTORS' }
   | { type: 'REFRESH_TOOL_DESCRIPTORS' }
   | { type: 'EXECUTE_TOOL_CALL'; payload: ToolCall }
+  | { type: 'RUN_APPROVED_SANDBOX'; payload: SandboxRunRequestType }
   | { type: 'GET_TOOL_CALL_HISTORY'; payload?: { limit?: number } }
   | { type: 'CLEAR_TOOL_CALL_HISTORY' }
   | { type: 'GET_PLATFORM_CAPABILITIES' }

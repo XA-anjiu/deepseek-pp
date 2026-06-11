@@ -89,6 +89,70 @@ describe('augmentRequestBody', () => {
     expect(result.augmented).not.toContain('## Role');
   });
 
+  it('honors prompt controls for memory, system prompt, and forced language', () => {
+    const withoutMemory = buildPromptAugmentation('remember nothing here', {
+      memories: [{
+        id: 1,
+        syncId: 'sync-1',
+        type: 'reference',
+        name: 'Hidden memory',
+        content: 'Do not include me',
+        description: '',
+        tags: [],
+        pinned: false,
+        createdAt: 1,
+        updatedAt: 1,
+        accessCount: 0,
+        lastAccessedAt: 1,
+      }],
+      memoryEnabled: false,
+      locale: 'en',
+    });
+    expect(withoutMemory.usedMemoryIds).toEqual([]);
+    expect(withoutMemory.augmented).toContain('(Memory injection disabled for this request)');
+    expect(withoutMemory.augmented).not.toContain('Do not include me');
+
+    const withoutSystemPrompt = buildPromptAugmentation('plain prompt', {
+      memories: [],
+      systemPromptEnabled: false,
+      locale: 'en',
+    });
+    expect(withoutSystemPrompt.renderedToolCount).toBe(0);
+    expect(withoutSystemPrompt.augmented).not.toContain('## Role');
+    expect(withoutSystemPrompt.augmented).toContain('plain prompt');
+
+    const memoryOnly = buildPromptAugmentation('remember durable facts', {
+      memories: [{
+        id: 2,
+        syncId: 'sync-2',
+        type: 'reference',
+        name: 'Durable memory',
+        content: 'Inject me without the full system prompt',
+        description: '',
+        tags: [],
+        pinned: false,
+        createdAt: 1,
+        updatedAt: 1,
+        accessCount: 0,
+        lastAccessedAt: 1,
+      }],
+      systemPromptEnabled: false,
+      locale: 'en',
+    });
+    expect(memoryOnly.usedMemoryIds).toEqual([2]);
+    expect(memoryOnly.augmented).toContain('## Existing Memories');
+    expect(memoryOnly.augmented).toContain('Inject me without the full system prompt');
+    expect(memoryOnly.augmented).not.toContain('## Role');
+
+    const forcedLanguage = buildPromptAugmentation('reply', {
+      memories: [],
+      forceResponseLanguage: 'en',
+      locale: 'zh-CN',
+    });
+    expect(forcedLanguage.augmented).toContain('## 回复语言');
+    expect(forcedLanguage.augmented).toContain('请使用英文回复。');
+  });
+
   it('localizes skill user-input wrapper without mutating the user input', () => {
     const result = augmentRequestBody(JSON.stringify({
       prompt: '/writer Draft about {raw_user_value}',

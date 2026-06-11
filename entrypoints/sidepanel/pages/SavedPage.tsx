@@ -1,0 +1,192 @@
+import { useEffect, useMemo, useState } from 'react';
+import type { SavedItem, SavedItemInput, SavedItemKind } from '../../../core/saved-items';
+import { SVG_PATHS } from '../constants';
+import { useI18n } from '../i18n';
+
+interface SavedPageProps {
+  onInsertPrompt: (text: string) => void;
+}
+
+export default function SavedPage({ onInsertPrompt }: SavedPageProps) {
+  const { t } = useI18n();
+  const [items, setItems] = useState<SavedItem[]>([]);
+  const [query, setQuery] = useState('');
+  const [kind, setKind] = useState<SavedItemKind>('snippet');
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [tags, setTags] = useState('');
+
+  const load = async () => {
+    const result = await chrome.runtime.sendMessage({ type: 'GET_SAVED_ITEMS' });
+    setItems(Array.isArray(result) ? result : []);
+  };
+
+  useEffect(() => {
+    void load();
+    const handler = (message: { type?: string; savedItems?: SavedItem[] }) => {
+      if (message.type === 'SAVED_ITEMS_UPDATED') {
+        setItems(Array.isArray(message.savedItems) ? message.savedItems : []);
+      }
+    };
+    chrome.runtime.onMessage.addListener(handler);
+    return () => chrome.runtime.onMessage.removeListener(handler);
+  }, []);
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return items;
+    return items.filter((item) => [
+      item.title,
+      item.content,
+      item.sourceUrl ?? '',
+      item.tags.join(' '),
+    ].join('\n').toLowerCase().includes(needle));
+  }, [items, query]);
+
+  const save = async () => {
+    const payload: SavedItemInput = {
+      kind,
+      title,
+      content,
+      tags: tags.split(',').map((tag) => tag.trim()).filter(Boolean),
+    };
+    const saved = await chrome.runtime.sendMessage({ type: 'SAVE_SAVED_ITEM', payload });
+    if (saved?.id) {
+      setTitle('');
+      setContent('');
+      setTags('');
+      await load();
+    }
+  };
+
+  const remove = async (id: string) => {
+    await chrome.runtime.sendMessage({ type: 'DELETE_SAVED_ITEM', payload: { id } });
+    await load();
+  };
+
+  const inputClass = 'w-full px-3 py-2 text-xs rounded-lg border outline-none transition-colors focus:border-[var(--ds-blue)]';
+  const inputStyle = {
+    background: 'var(--ds-bg)',
+    borderColor: 'var(--ds-border)',
+    color: 'var(--ds-text)',
+  };
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-[13px] font-medium" style={{ color: 'var(--ds-text)' }}>
+          {t('sidepanel.savedPage.title')}
+        </h2>
+        <span className="text-[11px]" style={{ color: 'var(--ds-text-tertiary)' }}>
+          {t('sidepanel.savedPage.count', { count: items.length })}
+        </span>
+      </div>
+
+      <div className="ds-surface-panel rounded-xl p-4 space-y-3">
+        <div className="grid grid-cols-2 gap-2">
+          {(['snippet', 'bookmark'] as const).map((value) => (
+            <button
+              key={value}
+              onClick={() => setKind(value)}
+              className="py-2 text-[11px] font-medium rounded-lg border transition-all duration-150"
+              style={{
+                background: kind === value ? 'var(--ds-blue-light)' : 'var(--ds-bg)',
+                color: kind === value ? 'var(--ds-blue)' : 'var(--ds-text-secondary)',
+                borderColor: kind === value ? 'var(--ds-selected-border)' : 'var(--ds-border)',
+              }}
+            >
+              {value === 'snippet' ? t('sidepanel.savedPage.snippet') : t('sidepanel.savedPage.bookmark')}
+            </button>
+          ))}
+        </div>
+        <input
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder={t('sidepanel.savedPage.titlePlaceholder')}
+          className={inputClass}
+          style={inputStyle}
+        />
+        <textarea
+          value={content}
+          onChange={(event) => setContent(event.target.value)}
+          placeholder={t('sidepanel.savedPage.contentPlaceholder')}
+          rows={4}
+          className={`${inputClass} resize-none`}
+          style={inputStyle}
+        />
+        <input
+          value={tags}
+          onChange={(event) => setTags(event.target.value)}
+          placeholder={t('sidepanel.savedPage.tagsPlaceholder')}
+          className={inputClass}
+          style={inputStyle}
+        />
+        <button
+          onClick={save}
+          disabled={!title.trim() || !content.trim()}
+          className="ds-btn-primary w-full py-2.5 text-xs font-medium text-white rounded-lg transition-all duration-150 disabled:opacity-40"
+        >
+          {t('sidepanel.savedPage.save')}
+        </button>
+      </div>
+
+      <input
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder={t('sidepanel.savedPage.searchPlaceholder')}
+        className={inputClass}
+        style={inputStyle}
+      />
+
+      <div className="space-y-2">
+        {filtered.length === 0 && (
+          <div className="text-xs text-center py-8" style={{ color: 'var(--ds-text-tertiary)' }}>
+            {t('sidepanel.savedPage.empty')}
+          </div>
+        )}
+        {filtered.map((item) => (
+          <article key={item.id} className="ds-surface-panel rounded-xl p-3 space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-xs font-medium truncate" style={{ color: 'var(--ds-text)' }}>
+                  {item.title}
+                </div>
+                <div className="text-[10px] mt-0.5" style={{ color: 'var(--ds-text-tertiary)' }}>
+                  {item.kind === 'snippet' ? t('sidepanel.savedPage.snippet') : t('sidepanel.savedPage.bookmark')}
+                </div>
+              </div>
+              <button
+                onClick={() => remove(item.id)}
+                className="shrink-0 p-1.5 rounded-md transition-colors"
+                style={{ color: 'var(--ds-danger)' }}
+                title={t('common.delete')}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d={SVG_PATHS.trash} />
+                </svg>
+              </button>
+            </div>
+            <p className="text-[11px] leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--ds-text-secondary)' }}>
+              {item.content.length > 280 ? `${item.content.slice(0, 280)}...` : item.content}
+            </p>
+            {item.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {item.tags.map((tag) => (
+                  <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: 'var(--ds-text-tertiary)', background: 'var(--ds-surface)' }}>
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={() => onInsertPrompt(item.content)}
+              className="ds-btn-secondary w-full py-2 text-[11px] font-medium rounded-lg transition-all duration-150"
+            >
+              {t('sidepanel.savedPage.insertPrompt')}
+            </button>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}

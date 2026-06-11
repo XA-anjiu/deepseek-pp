@@ -1,6 +1,11 @@
-import { PRESET_REINJECTION_INTERVAL } from '../constants';
 import { DEFAULT_LOCALE, translate, type SupportedLocale } from '../i18n';
 import { buildPromptAugmentation } from '../prompt';
+import {
+  DEFAULT_PROMPT_INJECTION_SETTINGS,
+  normalizePromptInjectionSettings,
+  shouldInjectPresetForTurn,
+  type PromptInjectionSettings,
+} from '../prompt/settings';
 import { parseSkillCommand } from '../skill/parser';
 import type { Memory, ModelType, Skill, SystemPromptPreset, ToolDescriptor } from '../types';
 
@@ -13,6 +18,7 @@ export interface RequestAugmentationState {
   toolDescriptors: readonly ToolDescriptor[];
   messageCount: number;
   locale?: SupportedLocale;
+  promptSettings?: Partial<PromptInjectionSettings>;
 }
 
 export interface RequestBodyAugmentationResult {
@@ -45,10 +51,17 @@ export function augmentRequestBody(
   const thinkingEnabled = body.thinking_enabled === true;
   const isFirstMessage = body.parent_message_id === null || body.parent_message_id === undefined;
   const messageCount = isFirstMessage ? 1 : state.messageCount + 1;
-  const shouldInjectPreset =
-    state.activePreset &&
-    (isFirstMessage || messageCount % PRESET_REINJECTION_INTERVAL === 0);
+  const promptSettings = normalizePromptInjectionSettings(state.promptSettings ?? DEFAULT_PROMPT_INJECTION_SETTINGS);
+  const shouldInjectPreset = shouldInjectPresetForTurn({
+    hasActivePreset: Boolean(state.activePreset),
+    isFirstMessage,
+    messageCount,
+    cadence: promptSettings.presetCadence,
+  });
   const presetContent = shouldInjectPreset ? state.activePreset!.content : null;
+  const forceResponseLanguage = promptSettings.forceResponseLanguage === 'auto'
+    ? null
+    : promptSettings.forceResponseLanguage;
 
   if (state.modelType) {
     body.model_type = state.modelType;
@@ -66,6 +79,9 @@ export function augmentRequestBody(
         projectContext: state.projectContext,
         toolDescriptors: state.toolDescriptors,
         locale,
+        memoryEnabled: promptSettings.memoryEnabled,
+        systemPromptEnabled: promptSettings.systemPromptEnabled,
+        forceResponseLanguage,
       });
 
       body.prompt = augmented;
@@ -85,6 +101,9 @@ export function augmentRequestBody(
     projectContext: state.projectContext,
     toolDescriptors: state.toolDescriptors,
     locale,
+    memoryEnabled: promptSettings.memoryEnabled,
+    systemPromptEnabled: promptSettings.systemPromptEnabled,
+    forceResponseLanguage,
   });
   body.prompt = augmented;
 

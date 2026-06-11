@@ -8,6 +8,12 @@ import type {
   SystemPromptPreset,
 } from '../types';
 import {
+  SAVED_ITEMS_SCHEMA_VERSION,
+  type SavedItem,
+  type SavedItemKind,
+  type SavedItemsState,
+} from '../saved-items/types';
+import {
   PROJECT_CONTEXT_SCHEMA_VERSION,
   type ProjectContext,
   type ProjectContextState,
@@ -18,6 +24,7 @@ import {
 const MEMORY_TYPES: readonly MemoryType[] = ['user', 'feedback', 'topic', 'reference'];
 const SKILL_SOURCES: readonly SkillSource[] = ['builtin', 'official', 'custom', 'remote'];
 const PROJECT_SOURCE_KINDS: readonly ProjectSourceKind[] = ['manual', 'local_folder', 'github', 'web_page'];
+const SAVED_ITEM_KINDS: readonly SavedItemKind[] = ['snippet', 'bookmark'];
 
 export function parseValidatedArray<T>(
   file: string,
@@ -127,6 +134,33 @@ export function validatePreset(value: unknown, path = 'preset'): SystemPromptPre
     content: requiredString(object.content, `${path}.content`),
     createdAt: requiredFiniteNumber(object.createdAt, `${path}.createdAt`),
     updatedAt: requiredFiniteNumber(object.updatedAt, `${path}.updatedAt`),
+  };
+}
+
+export function validateSavedItem(value: unknown, path = 'savedItem'): SavedItem {
+  const object = objectValue(value, path);
+  return {
+    id: requiredString(object.id, `${path}.id`),
+    syncId: requiredString(object.syncId, `${path}.syncId`),
+    kind: enumValue(object.kind, SAVED_ITEM_KINDS, `${path}.kind`),
+    title: requiredString(object.title, `${path}.title`),
+    content: requiredString(object.content, `${path}.content`),
+    ...(object.sourceUrl === undefined ? {} : { sourceUrl: requiredString(object.sourceUrl, `${path}.sourceUrl`) }),
+    tags: stringArray(object.tags, `${path}.tags`),
+    createdAt: requiredFiniteNumber(object.createdAt, `${path}.createdAt`),
+    updatedAt: requiredFiniteNumber(object.updatedAt, `${path}.updatedAt`),
+  };
+}
+
+export function validateSavedItemsState(value: unknown, path = 'savedItems'): SavedItemsState {
+  const object = objectValue(value, path);
+  if (object.schemaVersion !== undefined && object.schemaVersion !== SAVED_ITEMS_SCHEMA_VERSION) {
+    throw new Error(`${path}.schemaVersion is not supported`);
+  }
+  return {
+    schemaVersion: SAVED_ITEMS_SCHEMA_VERSION,
+    items: arrayValue(object.items, `${path}.items`)
+      .map((item, index) => validateSavedItem(item, `${path}.items[${index}]`)),
   };
 }
 

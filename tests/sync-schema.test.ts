@@ -6,6 +6,7 @@ import {
   validateProjectContext,
   validateProjectContextState,
   validateProjectFile,
+  validateSavedItemsState,
   validateStoredMemory,
 } from '../core/sync/schema';
 
@@ -113,5 +114,27 @@ describe('sync schema validators', () => {
     expect(state.activeFileIds).toEqual(['file-1']);
     expect(() => validateProjectContextState({ ...state, activeFileIds: ['missing'] }, 'project-context.json'))
       .toThrow('project-context.json.activeFileIds contains an unknown file');
+  });
+
+  it('validates saved items at sync boundaries', () => {
+    const state = validateSavedItemsState({
+      schemaVersion: 1,
+      items: [{
+        id: 'saved-1',
+        syncId: 'sync-1',
+        kind: 'snippet',
+        title: 'Reusable prompt',
+        content: 'Summarize the selected text.',
+        tags: ['prompt'],
+        createdAt: 1,
+        updatedAt: 2,
+      }],
+    }, 'saved-items.json');
+
+    expect(state.items[0].kind).toBe('snippet');
+    expect(() => validateSavedItemsState({
+      schemaVersion: 1,
+      items: [{ ...state.items[0], kind: 'note' }],
+    }, 'saved-items.json')).toThrow('saved-items.json.items[0].kind');
   });
 });

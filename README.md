@@ -5,7 +5,7 @@
 <h1 align="center">DeepSeek++</h1>
 
 <p align="center">
-  <strong>DeepSeek 浏览器插件：把 DeepSeek 网页版扩展成支持中英文体验、MCP、记忆、Skill、自动化和对话导出的 AI Agent 工作台</strong>
+  <strong>DeepSeek ++：把 DeepSeek 网页版扩展成支持中英文体验、MCP、记忆、Skill、自动化和对话导出的 AI Agent 工作台</strong>
 </p>
 
 <p align="center">

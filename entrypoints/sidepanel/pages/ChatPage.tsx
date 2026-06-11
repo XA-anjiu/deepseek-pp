@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import type { ChatMessage as ChatMessageType } from '../../../core/types';
+import {
+  DEFAULT_VOICE_SETTINGS,
+  detectVoiceCapabilities,
+  normalizeVoiceSettings,
+  type VoiceSettings,
+} from '../../../core/voice/settings';
 import ChatMessage from '../components/ChatMessage';
 import { consumePendingText, onPendingText } from '../pending-text';
 import { useI18n } from '../i18n';
@@ -20,8 +26,17 @@ export default function ChatPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [authStatus, setAuthStatus] = useState<ChatAuthStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(DEFAULT_VOICE_SETTINGS);
+  const [isListening, setIsListening] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const messagesRef = useRef<ChatMessageType[]>([]);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const voiceCapabilities = detectVoiceCapabilities(window);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   // Consume pending text from right-click on mount + register live callback
   useEffect(() => {
@@ -50,6 +65,19 @@ export default function ChatPage() {
       .catch(() => setAuthStatus({ available: false, provider: null, hasApiKey: false, hasToken: false }));
   }, []);
 
+  useEffect(() => {
+    chrome.runtime.sendMessage({ type: 'GET_VOICE_SETTINGS' })
+      .then((result) => setVoiceSettings(normalizeVoiceSettings(result)))
+      .catch(() => setVoiceSettings(DEFAULT_VOICE_SETTINGS));
+    const handler = (msg: { type?: string; voiceSettings?: VoiceSettings }) => {
+      if (msg.type === 'VOICE_SETTINGS_UPDATED') {
+        setVoiceSettings(normalizeVoiceSettings(msg.voiceSettings));
+      }
+    };
+    chrome.runtime.onMessage.addListener(handler);
+    return () => chrome.runtime.onMessage.removeListener(handler);
+  }, []);
+
   // Listen for streaming chunks and incoming text
   useEffect(() => {
     const handler = (msg: { type: string; text?: string; done?: boolean; error?: string } & ChatAuthStatus) => {
@@ -75,6 +103,9 @@ export default function ChatPage() {
         }
         if (msg.done) {
           setIsStreaming(false);
+          if (voiceSettings.readAloudEnabled) {
+            setTimeout(() => speakLatestAssistant(messagesRef.current, voiceSettings), 0);
+          }
           return;
         }
         setMessages((prev) => {
@@ -88,7 +119,7 @@ export default function ChatPage() {
     };
     chrome.runtime.onMessage.addListener(handler);
     return () => chrome.runtime.onMessage.removeListener(handler);
-  }, []);
+  }, [voiceSettings]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -119,6 +150,38 @@ export default function ChatPage() {
     setError(null);
     setIsStreaming(false);
     inputRef.current?.focus();
+  };
+
+  const startVoiceInput = () => {
+    const Recognition = getSpeechRecognitionConstructor();
+    if (!Recognition || isListening) return;
+    const recognition = new Recognition();
+    recognition.lang = 'zh-CN';
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => result[0]?.transcript ?? '')
+        .join('')
+        .trim();
+      if (transcript) setInputText(transcript);
+    };
+    recognition.onend = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+    recognition.onerror = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+    recognitionRef.current = recognition;
+    setIsListening(true);
+    recognition.start();
+  };
+
+  const stopVoiceInput = () => {
+    recognitionRef.current?.stop();
+    setIsListening(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -153,14 +216,26 @@ export default function ChatPage() {
             </span>
           )}
         </div>
-        <button
-          onClick={newSession}
-          className="text-xs px-2.5 py-1 rounded-md"
-          style={{ color: 'var(--ds-text-tertiary)', background: 'var(--ds-surface)' }}
-          title={t('sidepanel.chatPage.newSessionTitle')}
-        >
-          {t('sidepanel.chatPage.newSession')}
-        </button>
+        <div className="flex items-center gap-1.5">
+          {voiceSettings.readAloudEnabled && voiceCapabilities.speechSynthesis && (
+            <button
+              onClick={() => speakLatestAssistant(messagesRef.current, voiceSettings)}
+              className="text-xs px-2.5 py-1 rounded-md"
+              style={{ color: 'var(--ds-text-tertiary)', background: 'var(--ds-surface)' }}
+              title={t('sidepanel.chatPage.readLatest')}
+            >
+              {t('sidepanel.chatPage.read')}
+            </button>
+          )}
+          <button
+            onClick={newSession}
+            className="text-xs px-2.5 py-1 rounded-md"
+            style={{ color: 'var(--ds-text-tertiary)', background: 'var(--ds-surface)' }}
+            title={t('sidepanel.chatPage.newSessionTitle')}
+          >
+            {t('sidepanel.chatPage.newSession')}
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -195,6 +270,20 @@ export default function ChatPage() {
             className="flex-1 resize-none rounded-lg px-3 py-2 text-sm outline-none"
             style={{ background: 'var(--ds-surface)', color: 'var(--ds-text)', border: '1px solid var(--ds-border)' }}
           />
+          {voiceSettings.inputEnabled && voiceCapabilities.speechRecognition && (
+            <button
+              onClick={isListening ? stopVoiceInput : startVoiceInput}
+              className="self-end px-3 py-2 rounded-lg text-sm font-medium"
+              style={{
+                background: isListening ? 'var(--ds-danger-bg)' : 'var(--ds-surface)',
+                color: isListening ? 'var(--ds-danger)' : 'var(--ds-text-secondary)',
+                border: '1px solid var(--ds-border)',
+              }}
+              title={isListening ? t('sidepanel.chatPage.stopListening') : t('sidepanel.chatPage.voiceInput')}
+            >
+              {isListening ? t('sidepanel.chatPage.stop') : t('sidepanel.chatPage.mic')}
+            </button>
+          )}
           <button
             onClick={sendMessage}
             disabled={isStreaming || !inputText.trim()}
@@ -207,4 +296,44 @@ export default function ChatPage() {
       </div>
     </div>
   );
+}
+
+type SpeechRecognitionResultLike = {
+  readonly 0: { transcript: string };
+};
+
+type SpeechRecognitionEventLike = {
+  results: Iterable<SpeechRecognitionResultLike> | ArrayLike<SpeechRecognitionResultLike>;
+};
+
+type SpeechRecognitionLike = {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start(): void;
+  stop(): void;
+};
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null {
+  const value = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
+  return value.SpeechRecognition ?? value.webkitSpeechRecognition ?? null;
+}
+
+function speakLatestAssistant(messages: ChatMessageType[], settings: VoiceSettings) {
+  if (!('speechSynthesis' in window)) return;
+  const text = [...messages].reverse().find((message) => message.role === 'assistant')?.text.trim();
+  if (!text) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = settings.rate;
+  utterance.pitch = settings.pitch;
+  window.speechSynthesis.speak(utterance);
 }
