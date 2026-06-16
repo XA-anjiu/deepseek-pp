@@ -22,4 +22,26 @@ describe('content tool block styles', () => {
     expect(source).toContain('hasLikelyToolMarkerPrefix');
     expect(source).toContain('if (i < minIndex) break;');
   });
+
+  it('uses the shared injected theme variables for readable tool block text', () => {
+    const path = join(process.cwd(), 'entrypoints/content.ts');
+    const source = readFileSync(path, 'utf8');
+
+    expect(source).toContain("import { injectInjectedThemeStyles } from '../core/ui/injected-theme';");
+    expect(source).toContain('injectInjectedThemeStyles();');
+    expect(source).toContain('color: var(--dpp-ui-text);');
+    expect(source).toContain('color: var(--dpp-ui-text-muted);');
+    expect(source).not.toContain('body.dpp-theme-dark .dpp-tool-block-item { color: rgb(200, 200, 200); }');
+  });
+
+  it('keeps permission banner text on the same injected theme contract', () => {
+    const path = join(process.cwd(), 'entrypoints/content.ts');
+    const source = readFileSync(path, 'utf8');
+    const rule = source.match(/\.dpp-permission-banner \{([\s\S]*?)\n    \}/)?.[1] ?? '';
+
+    expect(rule).toContain('background: var(--dpp-ui-surface);');
+    expect(rule).toContain('color: var(--dpp-ui-text);');
+    expect(source).not.toContain('var(--ds-text');
+    expect(source).not.toContain('var(--ds-text-secondary');
+  });
 });

@@ -5,7 +5,7 @@
 <h1 align="center">DeepSeek++</h1>
 
 <p align="center">
-  <strong>DeepSeek browser extension for a bilingual AI agent workspace with MCP tools, memory, Skills, automation, web search, and conversation export.</strong>
+  <strong>DeepSeek browser extension for a bilingual AI agent workspace with memory, projects, Skills, MCP tools, browser control, saved snippets, artifact downloads, conversation export, and automation.</strong>
 </p>
 
 <p align="center">
@@ -157,7 +157,7 @@ Language can follow the browser or be set to English or Simplified Chinese. Deep
 - **Manual stop** - Long-running continuation can be stopped manually.
 
 <p align="center">
-  <img src="assets/screenshot-inline-tools.svg" width="720" alt="Tool continuation and speed display">
+  <img src="assets/screenshot-inline-tools.png" width="720" alt="Tool continuation and speed display">
 </p>
 
 ### Browser Control
@@ -199,7 +199,7 @@ Language can follow the browser or be set to English or Simplified Chinese. Deep
 - **Local security** - MCP configuration and secrets stay in browser-local storage. WebDAV sync does not sync sensitive data.
 
 <p align="center">
-  <img src="assets/screenshot-sidepanel-mcp.svg" width="300" alt="MCP management side panel">
+  <img src="assets/screenshot-sidepanel-mcp.png" width="300" alt="MCP management side panel">
 </p>
 
 ### OfficeCLI Document Tools
@@ -272,7 +272,7 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
 - **Reuses the enhanced workflow** - Automation triggers the task; the resulting prompt can still use presets, memory, MCP tools, and agentic continuation.
 
 <p align="center">
-  <img src="assets/screenshot-sidepanel-automation.svg" width="300" alt="Automation task side panel">
+  <img src="assets/screenshot-sidepanel-automation.png" width="300" alt="Automation task side panel">
 </p>
 
 ## 0.7.4 Release Highlights
@@ -626,8 +626,8 @@ Thanks to this release's contributors: [@todayzhou](https://github.com/todayzhou
 | Docs and release | Adds side-panel screenshots, MCP instructions, mock validation scripts, TypeScript fixes, release workflow, and build/package flow. |
 
 <p align="center">
-  <img src="assets/screenshot-sidepanel-mcp.svg" width="300" alt="MCP management side panel">
-  <img src="assets/screenshot-sidepanel-automation.svg" width="300" alt="Automation task side panel">
+  <img src="assets/screenshot-sidepanel-mcp.png" width="300" alt="MCP management side panel">
+  <img src="assets/screenshot-sidepanel-automation.png" width="300" alt="Automation task side panel">
 </p>
 
 </details>

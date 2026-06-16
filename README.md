@@ -5,7 +5,7 @@
 <h1 align="center">DeepSeek++</h1>
 
 <p align="center">
-  <strong>DeepSeek ++：把 DeepSeek 网页版扩展成支持中英文体验、MCP、记忆、Skill、自动化和对话导出的 AI Agent 工作台</strong>
+  <strong>DeepSeek++：把 DeepSeek 网页版扩展成支持中英文体验、记忆、项目、Skill、MCP、浏览器控制、保存项、产物下载、对话导出和自动化的 AI Agent 工作台</strong>
 </p>
 
 <p align="center">
@@ -157,7 +157,7 @@ DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏
 - **可手动停止** — 长任务执行中可以直接停止后续续跑
 
 <p align="center">
-  <img src="assets/screenshot-inline-tools.svg" width="720" alt="工具续跑与速度显示">
+  <img src="assets/screenshot-inline-tools.png" width="720" alt="工具续跑与速度显示">
 </p>
 
 ### 浏览器控制
@@ -199,7 +199,7 @@ DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏
 - **本地安全** — MCP 配置和密钥保存在浏览器本地，WebDAV 同步不会同步敏感信息
 
 <p align="center">
-  <img src="assets/screenshot-sidepanel-mcp.svg" width="300" alt="MCP 管理侧边栏">
+  <img src="assets/screenshot-sidepanel-mcp.png" width="300" alt="MCP 管理侧边栏">
 </p>
 
 ### OfficeCLI 文档工具
@@ -272,7 +272,7 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
 - **复用增强链路** — 自动化负责触发任务；触发后的 prompt 仍可经过预设、记忆、MCP 工具和 Agent 式续跑链路
 
 <p align="center">
-  <img src="assets/screenshot-sidepanel-automation.svg" width="300" alt="自动化任务侧边栏">
+  <img src="assets/screenshot-sidepanel-automation.png" width="300" alt="自动化任务侧边栏">
 </p>
 
 ## 0.7.4 变更回顾
@@ -626,8 +626,8 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
 | 文档与发布 | 增补侧边栏截图、MCP 操作说明、mock 验证脚本、TypeScript 修复、release workflow 和构建打包流程。 |
 
 <p align="center">
-  <img src="assets/screenshot-sidepanel-mcp.svg" width="300" alt="MCP 管理侧边栏">
-  <img src="assets/screenshot-sidepanel-automation.svg" width="300" alt="自动化任务侧边栏">
+  <img src="assets/screenshot-sidepanel-mcp.png" width="300" alt="MCP 管理侧边栏">
+  <img src="assets/screenshot-sidepanel-automation.png" width="300" alt="自动化任务侧边栏">
 </p>
 
 </details>

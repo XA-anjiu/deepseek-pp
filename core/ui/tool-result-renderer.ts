@@ -1,5 +1,6 @@
 import type { ToolCardResult } from '../types';
 import type { ArtifactOutput, ArtifactRuntimeLanguage } from '../artifact';
+import { injectInjectedThemeStyles } from './injected-theme';
 
 export type ToolResultRenderer = (input: {
   target: HTMLElement;
@@ -461,6 +462,7 @@ function ensureArtifactStyles(): void {
 }
 
 function ensureResultStyles(): void {
+  injectInjectedThemeStyles();
   if (document.getElementById('dpp-artifact-result-css')) return;
   const style = document.createElement('style');
   style.id = 'dpp-artifact-result-css';
@@ -472,14 +474,14 @@ function ensureResultStyles(): void {
   justify-content: space-between;
   gap: 10px;
   padding: 8px 10px;
-  border: 1px solid rgba(77, 107, 254, 0.18);
+  border: 1px solid var(--dpp-ui-border);
   border-radius: 8px;
-  background: rgba(77, 107, 254, 0.06);
+  background: var(--dpp-ui-accent-panel);
 }
 .dpp-artifact-meta {
   min-width: 0;
   font-size: 12px;
-  color: #1D1D1F;
+  color: var(--dpp-ui-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -497,13 +499,13 @@ function ensureResultStyles(): void {
   min-width: 0;
   font-size: 12px;
   font-weight: 600;
-  color: #1D1D1F;
+  color: var(--dpp-ui-text);
 }
 .dpp-result-text {
   margin-top: 6px;
   white-space: pre-wrap;
   font-size: 12px;
-  color: #3F3F46;
+  color: var(--dpp-ui-text-muted);
 }
 .dpp-artifact-preview-panel {
   position: fixed;
@@ -516,10 +518,10 @@ function ensureResultStyles(): void {
   height: 100vh;
   height: 100dvh;
   flex-direction: column;
-  border-left: 1px solid rgba(0, 0, 0, 0.10);
-  background: #FFFFFF;
-  box-shadow: -14px 0 40px rgba(15, 23, 42, 0.14);
-  color: #202124;
+  border-left: 1px solid var(--dpp-ui-border);
+  background: var(--dpp-ui-surface);
+  box-shadow: var(--dpp-ui-panel-shadow);
+  color: var(--dpp-ui-text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 .dpp-artifact-preview-panel-header {
@@ -529,9 +531,9 @@ function ensureResultStyles(): void {
   justify-content: space-between;
   gap: 12px;
   padding: 0 16px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  background: #F8F9FB;
-  color: #202124;
+  border-bottom: 1px solid var(--dpp-ui-border-muted);
+  background: var(--dpp-ui-surface-muted);
+  color: var(--dpp-ui-text);
   font-size: 14px;
   line-height: 20px;
 }
@@ -552,13 +554,13 @@ function ensureResultStyles(): void {
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: #5F6368;
+  color: var(--dpp-ui-text-muted);
   cursor: pointer;
   font-size: 18px;
   line-height: 1;
 }
 .dpp-artifact-preview-panel-close:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--dpp-ui-surface-hover);
 }
 .dpp-artifact-preview-panel-stage {
   flex: 1 1 auto;
@@ -586,8 +588,8 @@ function ensureResultStyles(): void {
   white-space: pre-wrap;
   word-break: break-word;
   border-radius: 7px;
-  background: rgba(0, 0, 0, 0.05);
-  color: #1D1D1F;
+  background: var(--dpp-ui-code-bg);
+  color: var(--dpp-ui-text);
   font-size: 11px;
   line-height: 1.45;
   padding: 8px;
@@ -598,7 +600,7 @@ function ensureResultStyles(): void {
 .dpp-artifact-run {
   border: 0;
   border-radius: 7px;
-  background: #4D6BFE;
+  background: var(--dpp-ui-accent);
   color: white;
   font-size: 11px;
   font-weight: 600;
@@ -609,8 +611,8 @@ function ensureResultStyles(): void {
   margin-top: 8px;
 }
 .dpp-artifact-download {
-  background: rgba(77, 107, 254, 0.12);
-  color: #3151D3;
+  background: var(--dpp-ui-accent-soft);
+  color: var(--dpp-ui-accent-strong);
 }
 .dpp-result-action:disabled,
 .dpp-artifact-download:disabled,
@@ -618,29 +620,6 @@ function ensureResultStyles(): void {
 .dpp-artifact-run:disabled {
   opacity: 0.65;
   cursor: default;
-}
-body.dpp-theme-dark .dpp-artifact-meta { color: #F5F5F5; }
-body.dpp-theme-dark .dpp-result-meta { color: #F5F5F5; }
-body.dpp-theme-dark .dpp-result-text { color: #D4D4D8; }
-body.dpp-theme-dark .dpp-artifact-download {
-  color: #B7C4FF;
-  background: rgba(124, 145, 255, 0.18);
-}
-body.dpp-theme-dark .dpp-artifact-preview-panel {
-  border-color: rgba(255, 255, 255, 0.14);
-  background: #17181C;
-  color: #F5F5F5;
-}
-body.dpp-theme-dark .dpp-artifact-preview-panel-header {
-  border-bottom-color: rgba(255, 255, 255, 0.10);
-  background: #17181C;
-  color: #F5F5F5;
-}
-body.dpp-theme-dark .dpp-artifact-preview-panel-close {
-  color: #D4D4D8;
-}
-body.dpp-theme-dark .dpp-artifact-preview-panel-close:hover {
-  background: rgba(255, 255, 255, 0.10);
 }
 body.dpp-theme-dark .dpp-artifact-preview-panel-stage {
   background: #FFFFFF;
@@ -650,12 +629,6 @@ body.dpp-theme-dark .dpp-artifact-preview-panel-stage {
     width: 100vw;
     min-width: 0;
   }
-}
-body.dpp-theme-dark .dpp-result-code,
-body.dpp-theme-dark .dpp-result-output,
-body.dpp-theme-dark .dpp-artifact-run-output {
-  color: #F5F5F5;
-  background: rgba(255, 255, 255, 0.08);
 }
 `;
   document.head.appendChild(style);

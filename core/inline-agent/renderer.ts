@@ -1,4 +1,5 @@
 import { renderInlineMarkdown } from './markdown';
+import { injectInjectedThemeStyles } from '../ui/injected-theme';
 
 const AGENT_STEP_STYLE_ID = 'dpp-inline-agent-css';
 
@@ -11,6 +12,7 @@ export interface InlineAgentRendererLabels {
 }
 
 export function injectInlineAgentStyles(): void {
+  injectInjectedThemeStyles();
   if (document.getElementById(AGENT_STEP_STYLE_ID)) return;
 
   const style = document.createElement('style');
@@ -18,7 +20,7 @@ export function injectInlineAgentStyles(): void {
   style.textContent = `
     .dpp-agent-container {
       margin-top: 12px;
-      border-left: 3px solid #6366f1;
+      border-left: 3px solid var(--dpp-ui-accent);
       padding-left: 12px;
     }
     [data-dpp-agent-host-hidden] > :not(.dpp-agent-container):not(.dpp-tool-block) {
@@ -29,13 +31,14 @@ export function injectInlineAgentStyles(): void {
     }
     .dpp-agent-step {
       margin-bottom: 8px;
-      border: 1px solid var(--dpp-border, #e5e7eb);
+      border: 1px solid var(--dpp-ui-border);
       border-radius: 8px;
       overflow: hidden;
-      background: var(--dpp-step-bg, #fafafa);
+      background: var(--dpp-ui-surface);
+      color: var(--dpp-ui-text);
     }
     .dpp-agent-step[data-status="streaming"] {
-      border-color: #6366f1;
+      border-color: var(--dpp-ui-accent);
     }
     .dpp-agent-step[data-status="executing_tools"] {
       border-color: #f59e0b;
@@ -49,8 +52,8 @@ export function injectInlineAgentStyles(): void {
       gap: 8px;
       padding: 6px 10px;
       font-size: 12px;
-      color: var(--dpp-muted, #6b7280);
-      background: var(--dpp-header-bg, #f3f4f6);
+      color: var(--dpp-ui-text-muted);
+      background: var(--dpp-ui-surface-muted);
       cursor: pointer;
       user-select: none;
     }
@@ -65,7 +68,7 @@ export function injectInlineAgentStyles(): void {
     }
     .dpp-agent-step-indicator {
       font-weight: 600;
-      color: #6366f1;
+      color: var(--dpp-ui-accent);
     }
     .dpp-agent-step-status {
       flex: 1;
@@ -86,6 +89,7 @@ export function injectInlineAgentStyles(): void {
       padding: 8px 10px;
       font-size: 13px;
       line-height: 1.5;
+      color: var(--dpp-ui-text);
       word-break: break-word;
       max-height: 300px;
       overflow-y: auto;
@@ -122,7 +126,7 @@ export function injectInlineAgentStyles(): void {
     .dpp-agent-step-body code {
       padding: 1px 4px;
       border-radius: 4px;
-      background: rgba(15, 23, 42, 0.06);
+      background: var(--dpp-ui-code-bg);
       font-family: 'SF Mono', Monaco, Menlo, Consolas, monospace;
       font-size: 0.92em;
     }
@@ -130,7 +134,7 @@ export function injectInlineAgentStyles(): void {
       margin: 6px 0;
       padding: 8px;
       border-radius: 6px;
-      background: rgba(15, 23, 42, 0.06);
+      background: var(--dpp-ui-code-bg);
       overflow-x: auto;
     }
     .dpp-agent-step-body pre code {
@@ -147,13 +151,13 @@ export function injectInlineAgentStyles(): void {
     .dpp-agent-step-body th,
     .dpp-agent-step-body td {
       padding: 5px 6px;
-      border-bottom: 1px solid var(--dpp-border, #e5e7eb);
+      border-bottom: 1px solid var(--dpp-ui-border);
       text-align: left;
       vertical-align: top;
     }
     .dpp-agent-step-body th {
       font-weight: 600;
-      color: var(--dpp-muted, #6b7280);
+      color: var(--dpp-ui-text-muted);
     }
     .dpp-agent-step[data-collapsed="true"] .dpp-agent-step-body {
       max-height: 0;
@@ -170,7 +174,7 @@ export function injectInlineAgentStyles(): void {
     .dpp-agent-step-tools {
       padding: 4px 10px 8px;
       font-size: 12px;
-      color: var(--dpp-muted, #6b7280);
+      color: var(--dpp-ui-text-muted);
       transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.2s ease;
     }
     .dpp-agent-step-tool-item {
@@ -188,7 +192,7 @@ export function injectInlineAgentStyles(): void {
       margin-top: 8px;
       padding: 6px 0;
       font-size: 12px;
-      color: var(--dpp-muted, #6b7280);
+      color: var(--dpp-ui-text-muted);
     }
     .dpp-agent-footer.complete::before {
       content: '\\25A0 ';
@@ -199,24 +203,6 @@ export function injectInlineAgentStyles(): void {
       color: #ef4444;
     }
 
-    body.dpp-theme-dark .dpp-agent-container {
-      border-left-color: #818cf8;
-    }
-    body.dpp-theme-dark .dpp-agent-step {
-      background: #1e1e2e;
-      border-color: #374151;
-    }
-    body.dpp-theme-dark .dpp-agent-step-header {
-      background: #111827;
-      color: #9ca3af;
-    }
-    body.dpp-theme-dark .dpp-agent-step-body {
-      color: #e5e7eb;
-    }
-    body.dpp-theme-dark .dpp-agent-step-body code,
-    body.dpp-theme-dark .dpp-agent-step-body pre {
-      background: rgba(255, 255, 255, 0.08);
-    }
     body.dpp-theme-dark .dpp-agent-stop-btn:hover {
       background: #1f1f2e;
     }
@@ -224,7 +210,7 @@ export function injectInlineAgentStyles(): void {
       font-size: inherit;
       line-height: 1.7;
       margin-top: 12px;
-      color: var(--ds-text, #1D1D1F);
+      color: var(--dpp-ui-text);
       word-break: break-word;
     }
     [data-dpp-body-text] * { color: inherit; }
@@ -232,7 +218,7 @@ export function injectInlineAgentStyles(): void {
     [data-dpp-body-text] p { margin: 3px 0; }
     [data-dpp-body-text] ul, [data-dpp-body-text] ol { margin: 3px 0 3px 16px; }
     [data-dpp-body-text] strong { font-weight: 600; }
-    [data-dpp-body-text] a { color: var(--ds-blue, #4D6BFE); text-decoration: underline; }
+    [data-dpp-body-text] a { color: var(--dpp-ui-accent); text-decoration: underline; }
     [data-dpp-body-text] table {
       width: 100%;
       margin: 10px 0;
@@ -242,19 +228,11 @@ export function injectInlineAgentStyles(): void {
     [data-dpp-body-text] th,
     [data-dpp-body-text] td {
       padding: 7px 8px;
-      border-bottom: 1px solid var(--dpp-border, #e5e7eb);
+      border-bottom: 1px solid var(--dpp-ui-border);
       text-align: left;
       vertical-align: top;
     }
     [data-dpp-body-text] th { font-weight: 600; }
-    body.dpp-theme-dark [data-dpp-body-text] {
-      color: var(--ds-text, #E5E7EB);
-    }
-    @media (prefers-color-scheme: dark) {
-      body:not(.dpp-theme-light) [data-dpp-body-text] {
-        color: var(--ds-text, #E5E7EB);
-      }
-    }
   `;
   document.head.appendChild(style);
 }

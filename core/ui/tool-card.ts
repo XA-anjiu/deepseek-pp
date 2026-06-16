@@ -1,4 +1,5 @@
 import type { ToolCall } from '../types';
+import { injectInjectedThemeStyles } from './injected-theme';
 
 export const TOOL_CARD_CLASS = 'dpp-tool-card';
 export const DSML_HIDDEN_CLASS = 'dpp-dsml-hidden';
@@ -13,6 +14,7 @@ export interface ToolCardResult {
 const collapseTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
 export function injectToolCardStyles() {
+  injectInjectedThemeStyles();
   if (document.getElementById(STYLE_ID)) return;
 
   const style = document.createElement('style');
@@ -166,18 +168,18 @@ function formatValue(value: unknown): string {
 const TOOL_CARD_CSS = `
 .dpp-tool-card {
   margin: 8px 0;
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  background: var(--dpp-ui-surface);
+  border: 1px solid var(--dpp-ui-border);
   border-radius: 12px;
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC', 'Segoe UI', sans-serif;
   font-size: 13px;
   overflow: hidden;
   transition: border-color 0.2s, box-shadow 0.2s;
   animation: dpp-tc-in 0.2s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  box-shadow: var(--dpp-ui-shadow);
 }
 .dpp-tool-card:hover {
-  border-color: #D1D5DB;
+  border-color: var(--dpp-ui-border);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 @keyframes dpp-tc-in {
@@ -194,14 +196,14 @@ const TOOL_CARD_CSS = `
   padding: 8px 12px;
   cursor: pointer;
   user-select: none;
-  background: #F7F8FA;
+  background: var(--dpp-ui-surface-muted);
   border-bottom: 1px solid transparent;
   transition: background 0.12s, border-color 0.2s;
 }
 .dpp-tool-card[data-collapsed="false"] .dpp-tc-header {
-  border-bottom-color: #EEF0F2;
+  border-bottom-color: var(--dpp-ui-border-muted);
 }
-.dpp-tc-header:hover { background: #EFF1F4; }
+.dpp-tc-header:hover { background: var(--dpp-ui-surface-hover); }
 .dpp-tc-header:focus { outline: none; box-shadow: inset 0 0 0 2px rgba(77, 107, 254, 0.2); }
 
 .dpp-tc-icon {
@@ -211,18 +213,18 @@ const TOOL_CARD_CSS = `
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  background: #EEF1FF;
-  color: #4D6BFE;
+  background: var(--dpp-ui-accent-soft);
+  color: var(--dpp-ui-accent);
   flex-shrink: 0;
 }
-.dpp-tool-card[data-state="success"] .dpp-tc-icon { background: #ECFDF5; color: #10B981; }
-.dpp-tool-card[data-state="error"]   .dpp-tc-icon { background: #FEF2F2; color: #EF4444; }
+.dpp-tool-card[data-state="success"] .dpp-tc-icon { background: #ECFDF5; color: var(--dpp-ui-success); }
+.dpp-tool-card[data-state="error"]   .dpp-tc-icon { background: #FEF2F2; color: var(--dpp-ui-error); }
 
 .dpp-tc-name {
   font-family: 'SF Mono', Monaco, Menlo, Consolas, monospace;
   font-size: 12px;
   font-weight: 600;
-  color: #1D1D1F;
+  color: var(--dpp-ui-text);
   flex-shrink: 0;
 }
 .dpp-tc-status {
@@ -230,7 +232,7 @@ const TOOL_CARD_CSS = `
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #6B7280;
+  color: var(--dpp-ui-text-muted);
   flex: 1;
   min-width: 0;
 }
@@ -239,14 +241,14 @@ const TOOL_CARD_CSS = `
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.dpp-tool-card[data-state="success"] .dpp-tc-status-text { color: #10B981; }
-.dpp-tool-card[data-state="error"]   .dpp-tc-status-text { color: #EF4444; }
+.dpp-tool-card[data-state="success"] .dpp-tc-status-text { color: var(--dpp-ui-success); }
+.dpp-tool-card[data-state="error"]   .dpp-tc-status-text { color: var(--dpp-ui-error); }
 
 .dpp-tc-spinner {
   width: 11px;
   height: 11px;
-  border: 1.5px solid #E5E7EB;
-  border-top-color: #4D6BFE;
+  border: 1.5px solid var(--dpp-ui-border);
+  border-top-color: var(--dpp-ui-accent);
   border-radius: 50%;
   animation: dpp-tc-spin 0.8s linear infinite;
   flex-shrink: 0;
@@ -257,7 +259,7 @@ const TOOL_CARD_CSS = `
 
 .dpp-tc-chevron {
   display: inline-flex;
-  color: #9CA3AF;
+  color: var(--dpp-ui-text-subtle);
   transition: transform 0.22s ease;
   flex-shrink: 0;
 }
@@ -278,14 +280,14 @@ const TOOL_CARD_CSS = `
   padding: 10px 12px;
 }
 .dpp-tc-section + .dpp-tc-section {
-  border-top: 1px dashed #EEF0F2;
+  border-top: 1px dashed var(--dpp-ui-border-muted);
 }
 .dpp-tc-section[data-hidden] { display: none; }
 
 .dpp-tc-label {
   font-size: 10px;
   font-weight: 600;
-  color: #9CA3AF;
+  color: var(--dpp-ui-text-subtle);
   letter-spacing: 0.6px;
   text-transform: uppercase;
   margin-bottom: 6px;
@@ -295,78 +297,26 @@ const TOOL_CARD_CSS = `
   font-family: 'SF Mono', Monaco, Menlo, Consolas, monospace;
   font-size: 12px;
   line-height: 1.65;
-  color: #1D1D1F;
+  color: var(--dpp-ui-text);
   white-space: pre-wrap;
   word-break: break-word;
 }
 .dpp-tc-payload-row { display: block; }
-.dpp-tc-payload-empty { color: #9CA3AF; font-style: italic; }
+.dpp-tc-payload-empty { color: var(--dpp-ui-text-subtle); font-style: italic; }
 
 .dpp-tc-key {
-  color: #6B7280;
+  color: var(--dpp-ui-text-muted);
 }
 .dpp-tc-value {
-  color: #1D1D1F;
+  color: var(--dpp-ui-text);
 }
 
 .dpp-tc-result {
   font-size: 12px;
-  color: #1D1D1F;
+  color: var(--dpp-ui-text);
   line-height: 1.55;
   word-break: break-word;
   white-space: pre-wrap;
-}
-
-body.dpp-theme-dark .dpp-tool-card {
-  background: #1F1F1F;
-  border-color: #2E2E2E;
-  box-shadow: none;
-}
-body.dpp-theme-dark .dpp-tool-card:hover { border-color: #3A3A3A; }
-body.dpp-theme-dark .dpp-tool-card[data-state="success"] { border-color: #134E32; }
-body.dpp-theme-dark .dpp-tool-card[data-state="error"]   { border-color: #4C1F1F; }
-body.dpp-theme-dark .dpp-tc-header { background: #262626; border-bottom-color: transparent; }
-body.dpp-theme-dark .dpp-tool-card[data-collapsed="false"] .dpp-tc-header { border-bottom-color: #2E2E2E; }
-body.dpp-theme-dark .dpp-tc-header:hover { background: #2E2E2E; }
-body.dpp-theme-dark .dpp-tc-icon { background: rgba(77, 107, 254, 0.15); }
-body.dpp-theme-dark .dpp-tool-card[data-state="success"] .dpp-tc-icon { background: rgba(16, 185, 129, 0.15); }
-body.dpp-theme-dark .dpp-tool-card[data-state="error"]   .dpp-tc-icon { background: rgba(239, 68, 68, 0.15); }
-body.dpp-theme-dark .dpp-tc-name,
-body.dpp-theme-dark .dpp-tc-payload,
-body.dpp-theme-dark .dpp-tc-value,
-body.dpp-theme-dark .dpp-tc-result { color: #E5E5E5; }
-body.dpp-theme-dark .dpp-tc-key,
-body.dpp-theme-dark .dpp-tc-status,
-body.dpp-theme-dark .dpp-tc-label,
-body.dpp-theme-dark .dpp-tc-payload-empty { color: #9CA3AF; }
-body.dpp-theme-dark .dpp-tc-section + .dpp-tc-section { border-top-color: #2E2E2E; }
-body.dpp-theme-dark .dpp-tc-spinner { border-color: #3A3A3A; border-top-color: #4D6BFE; }
-
-@media (prefers-color-scheme: dark) {
-  body:not(.dpp-theme-light) .dpp-tool-card {
-    background: #1F1F1F;
-    border-color: #2E2E2E;
-    box-shadow: none;
-  }
-  body:not(.dpp-theme-light) .dpp-tool-card:hover { border-color: #3A3A3A; }
-  body:not(.dpp-theme-light) .dpp-tool-card[data-state="success"] { border-color: #134E32; }
-  body:not(.dpp-theme-light) .dpp-tool-card[data-state="error"]   { border-color: #4C1F1F; }
-  body:not(.dpp-theme-light) .dpp-tc-header { background: #262626; border-bottom-color: transparent; }
-  body:not(.dpp-theme-light) .dpp-tool-card[data-collapsed="false"] .dpp-tc-header { border-bottom-color: #2E2E2E; }
-  body:not(.dpp-theme-light) .dpp-tc-header:hover { background: #2E2E2E; }
-  body:not(.dpp-theme-light) .dpp-tc-icon { background: rgba(77, 107, 254, 0.15); }
-  body:not(.dpp-theme-light) .dpp-tool-card[data-state="success"] .dpp-tc-icon { background: rgba(16, 185, 129, 0.15); }
-  body:not(.dpp-theme-light) .dpp-tool-card[data-state="error"]   .dpp-tc-icon { background: rgba(239, 68, 68, 0.15); }
-  body:not(.dpp-theme-light) .dpp-tc-name,
-  body:not(.dpp-theme-light) .dpp-tc-payload,
-  body:not(.dpp-theme-light) .dpp-tc-value,
-  body:not(.dpp-theme-light) .dpp-tc-result { color: #E5E5E5; }
-  body:not(.dpp-theme-light) .dpp-tc-key,
-  body:not(.dpp-theme-light) .dpp-tc-status,
-  body:not(.dpp-theme-light) .dpp-tc-label,
-  body:not(.dpp-theme-light) .dpp-tc-payload-empty { color: #9CA3AF; }
-  body:not(.dpp-theme-light) .dpp-tc-section + .dpp-tc-section { border-top-color: #2E2E2E; }
-  body:not(.dpp-theme-light) .dpp-tc-spinner { border-color: #3A3A3A; border-top-color: #4D6BFE; }
 }
 
 .dpp-dsml-hidden { display: none !important; }

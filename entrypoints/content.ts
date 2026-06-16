@@ -62,6 +62,7 @@ import {
   registerDefaultToolResultRenderers,
   renderToolResultWithRegistry,
 } from '../core/ui/tool-result-renderer';
+import { injectInjectedThemeStyles } from '../core/ui/injected-theme';
 import {
   normalizeRestoredToolExecution,
   sanitizeToolExecutionForRestoreStorage,
@@ -3373,6 +3374,7 @@ function createPermissionBanner(origin: string): HTMLElement | null {
 }
 
 function injectPermissionBannerStyles() {
+  injectInjectedThemeStyles();
   if (document.getElementById(PERMISSION_BANNER_STYLE_ID)) return;
 
   const style = document.createElement('style');
@@ -3386,11 +3388,11 @@ function injectPermissionBannerStyles() {
       padding: 10px 16px;
       margin: 8px 12px;
       border-radius: 10px;
-      background: var(--ds-card, #fff);
-      border: 1px solid var(--ds-blue, #4D6BFE);
+      background: var(--dpp-ui-surface);
+      border: 1px solid var(--dpp-ui-accent);
       box-shadow: 0 2px 12px rgba(77, 107, 254, 0.15);
       font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
-      color: var(--ds-text, #1D1D1F);
+      color: var(--dpp-ui-text);
       animation: dppPermFadeIn 0.2s ease-out;
       z-index: 100;
     }
@@ -3401,7 +3403,7 @@ function injectPermissionBannerStyles() {
     }
 
     .dpp-permission-text strong {
-      color: var(--ds-blue, #4D6BFE);
+      color: var(--dpp-ui-accent);
     }
 
     .dpp-permission-actions {
@@ -3413,7 +3415,7 @@ function injectPermissionBannerStyles() {
     .dpp-permission-actions button {
       padding: 5px 14px;
       border-radius: 8px;
-      border: 1px solid var(--ds-border, #E5E7EB);
+      border: 1px solid var(--dpp-ui-border);
       font: inherit;
       font-size: 12px;
       font-weight: 500;
@@ -3422,20 +3424,20 @@ function injectPermissionBannerStyles() {
     }
 
     .dpp-permission-deny {
-      background: var(--ds-surface, #F7F8FA);
-      color: var(--ds-text-secondary, #6B7280);
+      background: var(--dpp-ui-surface-muted);
+      color: var(--dpp-ui-text-muted);
     }
 
     .dpp-permission-deny:hover {
-      background: var(--ds-danger-bg, #FEF2F2);
-      color: var(--ds-danger, #EF4444);
-      border-color: var(--ds-danger-border, #FECACA);
+      background: var(--dpp-ui-danger-panel);
+      color: var(--dpp-ui-error);
+      border-color: var(--dpp-ui-error);
     }
 
     .dpp-permission-grant {
-      background: var(--ds-blue, #4D6BFE);
+      background: var(--dpp-ui-accent);
       color: #fff;
-      border-color: var(--ds-blue, #4D6BFE);
+      border-color: var(--dpp-ui-accent);
     }
 
     .dpp-permission-grant:hover {
@@ -3453,11 +3455,6 @@ function injectPermissionBannerStyles() {
       to { opacity: 1; transform: translateY(0); }
     }
 
-    body.dpp-theme-dark .dpp-permission-banner {
-      background: var(--ds-card, #151922);
-      border-color: var(--ds-blue, #7D91FF);
-      box-shadow: 0 2px 12px rgba(125, 145, 255, 0.2);
-    }
   `;
   document.head.appendChild(style);
 }
@@ -3471,6 +3468,7 @@ function escapeHtml(text: string): string {
 // --- Tool execution collapsible block, aligned with the host reasoning block style. ---
 
 function injectToolBlockStyles() {
+  injectInjectedThemeStyles();
   if (document.getElementById(TOOL_BLOCK_STYLE_ID)) return;
   const style = document.createElement('style');
   style.id = TOOL_BLOCK_STYLE_ID;
@@ -3484,17 +3482,17 @@ function injectToolBlockStyles() {
       gap: 4px;
       cursor: pointer;
       user-select: none;
-      color: rgb(97, 102, 107);
+      color: var(--dpp-ui-text-muted);
       font-size: 14px;
       line-height: 20px;
     }
     .dpp-tool-block-header:hover {
-      color: rgb(60, 65, 70);
+      color: var(--dpp-ui-text);
     }
     .dpp-tool-block-icon {
       width: 16px;
       height: 16px;
-      color: #4d6bfe;
+      color: var(--dpp-ui-accent);
       flex-shrink: 0;
     }
     .dpp-tool-block-title {
@@ -3530,14 +3528,14 @@ function injectToolBlockStyles() {
       gap: 8px;
       padding: 3px 0;
       font-size: 13px;
-      color: rgb(64, 65, 79);
+      color: var(--dpp-ui-text);
       line-height: 1.5;
     }
     .dpp-tool-block-dot {
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: #4d6bfe;
+      background: var(--dpp-ui-accent);
       flex-shrink: 0;
       margin-top: 7px;
     }
@@ -3548,22 +3546,22 @@ function injectToolBlockStyles() {
     .dpp-tool-block-item-name {
       font-family: 'SF Mono', Monaco, Menlo, Consolas, monospace;
       font-size: 12px;
-      color: #4d6bfe;
+      color: var(--dpp-ui-accent);
     }
     .dpp-tool-block-item-status {
-      color: #10b981;
+      color: var(--dpp-ui-success);
       margin-left: 6px;
     }
     .dpp-tool-block-item-status.error {
-      color: #ef4444;
+      color: var(--dpp-ui-error);
     }
     .dpp-tool-block-item-detail {
       margin-top: 4px;
       padding: 6px 8px;
       max-height: min(52vh, 420px);
       border-radius: 6px;
-      background: rgba(77, 107, 254, 0.06);
-      color: rgb(79, 84, 91);
+      background: var(--dpp-ui-accent-panel);
+      color: var(--dpp-ui-text-muted);
       font-family: 'SF Mono', Monaco, Menlo, Consolas, monospace;
       font-size: 12px;
       line-height: 1.45;
@@ -3575,53 +3573,29 @@ function injectToolBlockStyles() {
     .dpp-manual-continuation {
       margin: 10px 0 0 20px;
       padding: 10px 12px;
-      border-left: 2px solid #4d6bfe;
+      border-left: 2px solid var(--dpp-ui-accent);
       border-radius: 6px;
-      background: rgba(77, 107, 254, 0.05);
-      color: rgb(64, 65, 79);
+      background: var(--dpp-ui-accent-panel);
+      color: var(--dpp-ui-text);
       font-size: 14px;
       line-height: 1.65;
     }
     .dpp-manual-continuation.error {
-      border-left-color: #ef4444;
-      background: rgba(239, 68, 68, 0.08);
+      border-left-color: var(--dpp-ui-error);
+      background: var(--dpp-ui-danger-panel);
     }
     .dpp-manual-continuation-title {
       margin-bottom: 6px;
-      color: #4d6bfe;
+      color: var(--dpp-ui-accent);
       font-size: 12px;
       font-weight: 600;
     }
     .dpp-manual-continuation.error .dpp-manual-continuation-title {
-      color: #ef4444;
+      color: var(--dpp-ui-error);
     }
     .dpp-manual-continuation-content {
       white-space: pre-wrap;
       overflow-wrap: anywhere;
-    }
-    body.dpp-theme-dark .dpp-tool-block-header { color: rgb(155, 160, 165); }
-    body.dpp-theme-dark .dpp-tool-block-header:hover { color: rgb(200, 205, 210); }
-    body.dpp-theme-dark .dpp-tool-block-item { color: rgb(200, 200, 200); }
-    body.dpp-theme-dark .dpp-tool-block-item-detail {
-      background: rgba(125, 150, 255, 0.12);
-      color: rgb(210, 213, 218);
-    }
-    body.dpp-theme-dark .dpp-manual-continuation {
-      background: rgba(125, 150, 255, 0.10);
-      color: rgb(210, 213, 218);
-    }
-    @media (prefers-color-scheme: dark) {
-      body:not(.dpp-theme-light) .dpp-tool-block-header { color: rgb(155, 160, 165); }
-      body:not(.dpp-theme-light) .dpp-tool-block-header:hover { color: rgb(200, 205, 210); }
-      body:not(.dpp-theme-light) .dpp-tool-block-item { color: rgb(200, 200, 200); }
-      body:not(.dpp-theme-light) .dpp-tool-block-item-detail {
-        background: rgba(125, 150, 255, 0.12);
-        color: rgb(210, 213, 218);
-      }
-      body:not(.dpp-theme-light) .dpp-manual-continuation {
-        background: rgba(125, 150, 255, 0.10);
-        color: rgb(210, 213, 218);
-      }
     }
   `;
   document.head.appendChild(style);

@@ -8,6 +8,7 @@ import type { ToolCardResult } from '../core/types';
 describe('tool result renderer registry', () => {
   afterEach(() => {
     vi.useRealTimers();
+    document.head.innerHTML = '';
     document.body.innerHTML = '';
   });
 
@@ -37,6 +38,36 @@ describe('tool result renderer registry', () => {
     expect(target.querySelector('.dpp-artifact-result')).not.toBeNull();
     expect(target.textContent).toContain('report.md');
     expect(target.textContent).toContain('Download');
+    expect(document.getElementById('dpp-injected-theme-css')).not.toBeNull();
+  });
+
+  it('uses the shared injected theme variables for result text contrast', () => {
+    registerDefaultToolResultRenderers();
+    const target = document.createElement('div');
+    const result: ToolCardResult = {
+      ok: true,
+      summary: 'Draft ready',
+      output: {
+        kind: 'skill_draft',
+        draft: {
+          name: 'audit',
+          description: 'Review contrast-sensitive output.',
+          instructions: 'Check dark theme text.',
+          memoryEnabled: true,
+        },
+      },
+    };
+
+    expect(renderToolResultWithRegistry({
+      target,
+      result,
+      sendMessage: vi.fn(),
+    })).toBe(true);
+
+    const style = document.getElementById('dpp-artifact-result-css');
+    expect(style?.textContent).toContain('color: var(--dpp-ui-text);');
+    expect(style?.textContent).toContain('color: var(--dpp-ui-text-muted);');
+    expect(style?.textContent).not.toContain('body.dpp-theme-dark .dpp-result-text');
   });
 
   it('opens HTML artifacts in a native-like right-side preview panel only after user action', async () => {

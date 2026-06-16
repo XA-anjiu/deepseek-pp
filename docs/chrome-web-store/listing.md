@@ -92,8 +92,13 @@ Mandatory assets prepared in this repo:
 
 Optional existing screenshots for future store-gallery polish:
 
+- `assets/screenshot-inline-tools.png`
 - `assets/screenshot-sidepanel-memory.png`
+- `assets/screenshot-sidepanel-saved.png`
+- `assets/screenshot-sidepanel-projects.png`
 - `assets/screenshot-sidepanel-skill.png`
-- `assets/screenshot-sidepanel-mcp.svg`
-- `assets/screenshot-sidepanel-automation.svg`
-- `assets/screenshot-inline-tools.svg`
+- `assets/screenshot-sidepanel-mcp.png`
+- `assets/screenshot-sidepanel-tools.png`
+- `assets/screenshot-sidepanel-browser.png`
+- `assets/screenshot-sidepanel-automation.png`
+- `assets/screenshot-sidepanel-settings.png`
