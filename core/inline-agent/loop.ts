@@ -61,6 +61,9 @@ export async function runInlineAgentLoop(
   let nudgeCount = 0;
   let totalSteps = 0;
   let totalTools = allExecutions.length;
+  // When the model emits `<task_complete>` we already have the final answer;
+  // reuse its summary and skip the redundant finalization step.
+  let resolvedFinalText: string | null = null;
 
   try {
     const clientHeaders = createClientHeaders();
@@ -110,6 +113,12 @@ export async function runInlineAgentLoop(
 
       parentMessageId = turn.responseMessageId;
       if (parentMessageId == null) {
+        post('AGENT_STEP_COMPLETE', {
+          loopId,
+          stepIndex: step,
+          responseMessageId: null,
+          toolExecutions: [],
+        } satisfies InlineAgentStepCompleteMsg);
         totalSteps = step + 1;
         break;
       }
@@ -117,12 +126,12 @@ export async function runInlineAgentLoop(
       const visibleText = streamSnapshot.visibleText;
 
       if (extractTaskCompleteSignal(visibleText)) {
-        const stepExecutions: ToolExecutionRecord[] = [];
+        resolvedFinalText = visibleText;
         post('AGENT_STEP_COMPLETE', {
           loopId,
           stepIndex: step,
           responseMessageId: turn.responseMessageId,
-          toolExecutions: stepExecutions,
+          toolExecutions: [],
         } satisfies InlineAgentStepCompleteMsg);
         totalSteps = step + 1;
         break;
@@ -189,6 +198,18 @@ export async function runInlineAgentLoop(
         const nudgeToolCalls = nudgeStreamSnapshot.toolCalls;
         const nudgeVisibleText = nudgeStreamSnapshot.visibleText;
 
+        if (extractTaskCompleteSignal(nudgeVisibleText)) {
+          resolvedFinalText = nudgeVisibleText;
+          post('AGENT_STEP_COMPLETE', {
+            loopId,
+            stepIndex: step,
+            responseMessageId: nudgeTurn.responseMessageId,
+            toolExecutions: [],
+          } satisfies InlineAgentStepCompleteMsg);
+          totalSteps = step + 1;
+          break;
+        }
+
         if (nudgeToolCalls.length === 0) {
           if (!visibleText.trim() && !nudgeVisibleText.trim()) {
             throw new Error('DeepSeek returned an empty agent continuation after a delayed retry.');
@@ -237,7 +258,11 @@ export async function runInlineAgentLoop(
     }
 
     let finalText = '';
-    if (!signal.aborted && totalTools > 0 && totalSteps > 0) {
+    if (resolvedFinalText !== null) {
+      // The model already emitted `<task_complete>` with a summary; reuse it
+      // instead of issuing a redundant finalization request.
+      finalText = resolvedFinalText;
+    } else if (!signal.aborted && totalTools > 0 && totalSteps > 0 && parentMessageId != null) {
       try {
         await waitBetweenDeepSeekRequests(signal);
         if (signal.aborted) {
