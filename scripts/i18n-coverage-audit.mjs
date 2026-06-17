@@ -35,6 +35,7 @@ const pathAllowlist = new Map([
   ['core/ui/tool-card.ts', 'legacy unused DSML card renderer retained for compatibility; current visible tool blocks use content.toolBlock resources'],
   ['scripts/i18n-coverage-audit.mjs', 'audit allowlist contains Chinese fragments that it is designed to detect elsewhere'],
   ['scripts/mcp-live-mock.mjs', 'mock explicitly validates zh-CN continuation prompt behavior'],
+  ['scripts/render-product-assets.mjs', 'offline README and Chrome Web Store image generator intentionally contains fixed zh-CN marketing fixture copy; runtime UI remains locale-backed'],
   ['scripts/shell-smoke.mjs', 'unicode stdout fixture intentionally verifies non-ASCII shell output'],
   ['scripts/web-search-smoke.mjs', 'legacy smoke fixture intentionally simulates zh-CN web-search prompts and output'],
 ]);

@@ -29,7 +29,7 @@
   <a href="#feature-overview">Feature Overview</a> ·
   <a href="#use-cases">Use Cases</a> ·
   <a href="#installation">Installation</a> ·
-  <a href="#074-release-highlights">0.7.4 Highlights</a>
+  <a href="#075-release-highlights">0.7.5 Highlights</a>
 </p>
 
 ## Product Positioning
@@ -46,7 +46,7 @@ Language can follow the browser or be set to English or Simplified Chinese. Deep
 - [Feature Overview](#feature-overview)
 - [Use Cases](#use-cases)
 - [Core Features](#core-features)
-- [0.7.4 Release Highlights](#074-release-highlights)
+- [0.7.5 Release Highlights](#075-release-highlights)
 - [Installation](#installation)
 - [Friendly Links](#friendly-links)
 
@@ -244,8 +244,9 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
 - **Built-in Skills** - Includes ready-to-use general collaboration Skills and manually enabled third-party OfficeCLI document Skills.
 - **Custom Skills** - Create your own Skills in the side panel with system instructions and parameters.
 - **GitHub import** - Preview and import third-party Skills from a GitHub repository, directory, or direct `SKILL.md` link.
+- **Local import** - Preview, import, and sync local Skill folders so personal workflows can be reused in DeepSeek++.
 - **Source and update metadata** - GitHub-imported Skills show source repository, version, license, sync time, and upstream update checks.
-- **Enable control** - Custom and GitHub-imported Skills can be enabled, disabled, or deleted independently without affecting other local Skills.
+- **Enable control** - Custom, locally imported, and GitHub-imported Skills can be enabled, disabled, or deleted independently without affecting other Skills.
 - **Slash trigger** - Type `/` in the chat box to open autocomplete and inject the selected Skill's system prompt.
 - **Memory integration** - Skills can choose whether to include memory context.
 
@@ -275,7 +276,24 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
   <img src="assets/screenshot-sidepanel-automation.png" width="300" alt="Automation task side panel">
 </p>
 
-## 0.7.4 Release Highlights
+## 0.7.5 Release Highlights
+
+0.7.5 strengthens local Skill workflows and agent-output stability, making local Skill imports easier to review while reducing noisy restored history and redundant task finalization.
+
+| Area | Main changes |
+|------|--------------|
+| Local Skill management | Adds local Skill preview, import, and sync support in the Skills page so personal or team Skill folders can join the DeepSeek++ workflow. |
+| Skill preview experience | Shows Skill names, descriptions, source details, and availability before import, helping users review content before enabling it. |
+| Restored history cleanup | Restored `task_complete` tool blocks are shown as cleaner summaries, reducing technical markers in older conversations. |
+| Automation stability | Creates PoW headers on demand, reducing interruptions caused by request-preparation timing during automation runs. |
+| Inline agent finalization | Reuses an existing completion summary when available so inline agent tasks do not produce redundant final answers. |
+| Product assets | Refreshes README and store assets with current product screenshots covering side-panel, tool execution, automation, and project surfaces. |
+| Regression coverage | Adds tests for local Skill import, sync merging, Shell Host local preview, history cleanup, PoW, inline agent behavior, and injected styling. |
+
+<details>
+<summary>Show 0.7.4 release highlights</summary>
+
+### 0.7.4 Release Highlights
 
 0.7.4 improves project organization and language control, making project conversations manageable from the DeepSeek history sidebar while giving users clearer control over the active interface language.
 
@@ -287,6 +305,8 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
 | Language settings | Adds an Interface language section in Settings with Follow, Simplified Chinese, and English options plus the currently active language. |
 | Stability | Tightens project sidebar rendering, menu clicks, history-title extraction, and repeated refresh handling to reduce flicker, wrong hiding, and timestamp noise in titles. |
 | Regression coverage | Adds tests for project sidebar management, native-menu project actions, language copy, and history-title extraction. |
+
+</details>
 
 <details>
 <summary>Show 0.7.3 release highlights</summary>
