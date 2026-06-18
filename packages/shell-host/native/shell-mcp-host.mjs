@@ -1128,13 +1128,25 @@ function runInSession(session, command, { timeoutMs }) {
     child.stdout.on('data', onStdout);
     child.stderr.on('data', onStderr);
 
-    // If the shell dies mid-command, surface it as a failure.
-    const onExit = () => {
+    // If the command kills the shell itself (e.g. `exit N`), treat the shell's
+    // exit code as the command's result rather than a generic failure. The
+    // session is dead either way — caller will get "session not found" on reuse.
+    const onExit = (exitCode) => {
       if (resolved || timedOut) return;
       clearTimeout(timer);
       detach();
       child.off('exit', onExit);
-      reject(new Error('Session shell exited before the command completed.'));
+      resolve({
+        command,
+        shell: session.shell,
+        session_id: session.id,
+        exitCode: typeof exitCode === 'number' ? exitCode : 1,
+        stdout: Buffer.concat(stdoutChunks.length ? [stdoutChunks.join('')] : []).toString('utf8').replace(/\r?\n$/, ''),
+        stderr: stderrText,
+        truncated: stdoutBytes > SESSION_MAX_OUTPUT_BYTES || stderrBytes > SESSION_MAX_OUTPUT_BYTES,
+        timedOut: false,
+        shellExited: true,
+      });
     };
     child.once('exit', onExit);
   });
