@@ -3,6 +3,7 @@ import {
   MCP_PROTOCOL_VERSION,
   createMcpNotification,
   createMcpRequest,
+  createMcpTransport,
   createMcpStreamableHttpTransport,
   type McpServerConfig,
 } from '../core/mcp';
@@ -69,6 +70,53 @@ describe('MCP transport response limits', () => {
     expect(requests[0].headers.get('MCP-Protocol-Version')).toBeNull();
     expect(requests[1].headers.get('MCP-Protocol-Version')).toBe(MCP_PROTOCOL_VERSION);
     expect(requests[2].headers.get('MCP-Protocol-Version')).toBe(MCP_PROTOCOL_VERSION);
+  });
+
+  it('sends raw JSON-RPC to stdio bridge HTTP services', async () => {
+    const requests: unknown[] = [];
+    vi.stubGlobal('chrome', {
+      permissions: {
+        contains: vi.fn(async () => true),
+        request: vi.fn(async () => true),
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      requests.push(body);
+      return new Response(JSON.stringify({
+        jsonrpc: '2.0',
+        id: body.id ?? null,
+        result: { protocolVersion: MCP_PROTOCOL_VERSION, capabilities: { tools: {} } },
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }));
+
+    const transport = createMcpTransport({
+      ...createServerConfig(),
+      transport: {
+        kind: 'stdio_bridge',
+        url: 'http://127.0.0.1:9333/mcp',
+        command: 'uvx',
+        args: ['enhanced-mcp-memory'],
+      },
+    });
+
+    await transport.request(createMcpRequest('initialize', {
+      protocolVersion: MCP_PROTOCOL_VERSION,
+      capabilities: { tools: {} },
+      clientInfo: { name: 'test', version: '0.0.0' },
+    }));
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      jsonrpc: '2.0',
+      method: 'initialize',
+    });
+    expect(requests[0]).not.toHaveProperty('protocol');
+    expect(requests[0]).not.toHaveProperty('server');
+    expect(requests[0]).not.toHaveProperty('message');
   });
 });
 

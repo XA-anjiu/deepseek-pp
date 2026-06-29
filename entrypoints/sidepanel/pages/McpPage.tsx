@@ -1295,13 +1295,12 @@ function transportFromForm(
   const env = parseEnv(form.env, t);
   if ('error' in env) return env;
   const command = form.command.trim();
-  if (!command) return { error: t('sidepanel.mcpPage.validation.stdioCommandRequired') };
   return {
     transport: {
       kind: 'stdio_bridge',
       url,
       command,
-      args: form.args.split(/\s+/).map((item) => item.trim()).filter(Boolean),
+      args: command ? form.args.split(/\s+/).map((item) => item.trim()).filter(Boolean) : [],
       cwd: form.cwd.trim(),
       env: env.env,
     },

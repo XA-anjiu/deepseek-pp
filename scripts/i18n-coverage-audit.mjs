@@ -89,7 +89,7 @@ const lineAllowlist = [
   },
   {
     path: 'entrypoints/content.ts',
-    includes: '已思考|思考中|正在思考',
+    includes: '已(?:深度)?思考|深度思考|思考过程|思考中|正在思考',
     reason: 'DeepSeek host reasoning-label detection across locales',
   },
   {

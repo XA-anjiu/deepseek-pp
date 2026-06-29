@@ -475,7 +475,7 @@ function buildLocalImportedInstructions(input: {
     '',
     'These scripts remain in the local Skill directory. Import does not execute them and does not bundle their source into the prompt.',
     '',
-    ...scriptFiles.map((file) => `- ${file.path} (${file.bytes} bytes)`),
+    ...scriptFiles.map((file) => `- ${relativeToSkillDirectory(file.path, directory)} (${file.bytes} bytes)`),
   ].join('\n');
 
   const resourceDocs = resources.length === 0 ? '' : [
@@ -484,7 +484,7 @@ function buildLocalImportedInstructions(input: {
     'These text files come from the same local Skill directory and supplement agents, references, templates, or examples referenced by the original SKILL.md.',
     '',
     ...resources.map((resource) => [
-      `### ${resource.path}`,
+      `### ${relativeToSkillDirectory(resource.path, directory)}`,
       '',
       resource.content.trim(),
     ].join('\n')),
@@ -495,10 +495,18 @@ function buildLocalImportedInstructions(input: {
     '',
     'These files were not bundled into the prompt because of count, size, or type limits. Inspect the local directory when needed.',
     '',
-    ...omittedFiles.map((file) => `- ${file.path} (${file.bytes} bytes)`),
+    ...omittedFiles.map((file) => `- ${relativeToSkillDirectory(file.path, directory)} (${file.bytes} bytes)`),
   ].join('\n');
 
   return [header, executionBoundary, body, scripts, resourceDocs, omitted].filter(Boolean).join('\n\n---\n\n');
+}
+
+function relativeToSkillDirectory(path: string, directory: string): string {
+  const normalizedPath = path.replace(/\\/g, '/').replace(/^\/+/, '');
+  const normalizedDirectory = directory.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  if (!normalizedDirectory) return normalizedPath;
+  const prefix = `${normalizedDirectory}/`;
+  return normalizedPath.startsWith(prefix) ? normalizedPath.slice(prefix.length) : normalizedPath;
 }
 
 function parseSkillDoc(raw: string, path: string): ParsedSkillDoc {

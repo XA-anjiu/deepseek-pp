@@ -149,6 +149,28 @@ describe('local Skill importer', () => {
       expect.objectContaining({ name: 'demo-local', source: 'remote' }),
     ]));
   });
+
+  it('renders nested local Skill resources relative to the Skill directory', async () => {
+    vi.mocked(executeMcpToolCall).mockResolvedValueOnce(createNestedLocalSkillToolResult());
+
+    const result = await importLocalSkillSource({
+      rootPath: '/Users/me/.codex/skills',
+      selectedPaths: ['nested/SKILL.md'],
+    });
+
+    const imported = result.imported[0];
+    expect(imported.remote).toMatchObject({
+      provider: 'local',
+      localRootPath: '/Users/me/.codex/skills',
+      localDirectory: '/Users/me/.codex/skills/nested',
+      scriptFiles: [{ path: 'nested/scripts/run.py', bytes: 15 }],
+    });
+    expect(imported.instructions).toContain('Run commands with cwd set to the Skill directory path: /Users/me/.codex/skills/nested');
+    expect(imported.instructions).toContain('- scripts/run.py (15 bytes)');
+    expect(imported.instructions).toContain('### references/child.md');
+    expect(imported.instructions).not.toContain('- nested/scripts/run.py');
+    expect(imported.instructions).not.toContain('### nested/references/child.md');
+  });
 });
 
 function createShellServer(toolNames: string[]): McpServerConfig {
@@ -225,6 +247,53 @@ function createLocalSkillToolResult() {
             ],
             omittedFiles: [],
             scriptFiles: [{ path: 'scripts/run.py', bytes: 18 }],
+            warnings: [],
+          },
+        ],
+      },
+    },
+  };
+}
+
+function createNestedLocalSkillToolResult() {
+  const content = [
+    '---',
+    'name: nested-local',
+    'description: Nested local Skill',
+    '---',
+    '',
+    '# Nested',
+    '',
+    'Use references/child.md and scripts/run.py.',
+  ].join('\n');
+
+  return {
+    ok: true,
+    summary: 'MCP tool executed',
+    output: {
+      ok: true,
+      data: {
+        rootPath: '/Users/me/.codex/skills',
+        displayName: 'skills',
+        directoryName: 'skills',
+        warnings: [],
+        truncated: false,
+        skills: [
+          {
+            path: 'nested/SKILL.md',
+            directory: 'nested',
+            directoryPath: '/Users/me/.codex/skills/nested',
+            content,
+            bodyBytes: content.length,
+            includedFiles: [
+              {
+                path: 'nested/references/child.md',
+                bytes: 11,
+                content: 'Child guide.',
+              },
+            ],
+            omittedFiles: [],
+            scriptFiles: [{ path: 'nested/scripts/run.py', bytes: 15 }],
             warnings: [],
           },
         ],
