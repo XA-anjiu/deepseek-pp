@@ -29,7 +29,7 @@
   <a href="#功能速览">功能速览</a> ·
   <a href="#适合场景">适合场景</a> ·
   <a href="#安装">安装</a> ·
-  <a href="#105-变更回顾">1.0.5 变更</a>
+  <a href="#106-变更回顾">1.0.6 变更</a>
 </p>
 
 ## 产品定位
@@ -46,7 +46,7 @@ DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏
 - [功能速览](#功能速览)
 - [适合场景](#适合场景)
 - [核心功能](#核心功能)
-- [1.0.5 变更回顾](#105-变更回顾)
+- [1.0.6 变更回顾](#106-变更回顾)
 - [安装](#安装)
 - [友情链接](#友情链接)
 
@@ -297,7 +297,26 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
   <img src="assets/screenshot-sidepanel-automation.png" width="300" alt="自动化任务侧边栏">
 </p>
 
-## 1.0.5 变更回顾
+## 1.0.6 变更回顾
+
+1.0.6 是 Skill 和本机工具稳定性更新，重点内置 spec-driven-develop 工作流，改善 GitHub/本机 Skill 导入体验，并让产物、Shell 工具结果和 DeepSeek 推理页面识别更可靠。
+
+| 方向 | 主要变化 |
+|------|----------|
+| 内置 Skill 库 | 新增 spec-driven-develop、deep-discuss 和 review-spd 工作流，支持从 Skill 页启用结构化需求分析、深度讨论和代码审查模板。 |
+| Skill 导入稳定性 | GitHub Skill 导入减少请求次数，本机 Skill 导入支持嵌套目录和预览，降低导入大型 Skill 库时的失败率。 |
+| 产物与工具结果 | 生成产物会持久保存，刷新后仍可恢复；大体积工具结果改用外部化载荷，减少长任务中消息过大或续跑中断。 |
+| Shell Native Host | Shell 工具对本机 Skill 预览、stdio 桥接和权限策略的处理更稳，命令型本机工作流更容易接入。 |
+| DeepSeek 页面兼容 | 更准确识别 DeepSeek 推理页面，让工具块样式和增强能力在更多 DeepSeek 页面形态下保持可用。 |
+| 回归覆盖 | 新增 Skill 导入、Shell host、本机 Skill 预览、产物恢复、外部化工具载荷、流式工具解析和桥接传输回归测试。 |
+
+<details>
+<summary>展开历史版本变更回顾（1.0.5 - 0.2.0）</summary>
+
+<details>
+<summary>展开 1.0.5 变更回顾</summary>
+
+### 1.0.5 变更回顾
 
 1.0.5 是项目上下文和 Agent 续跑稳定性更新，重点让项目里的新对话启动更直接、项目对话标题更准确，同时减少 inline agent 重复续跑、内部续跑消息外露、识图上传误判和代码块下载按钮遮挡内容的问题。
 
@@ -310,8 +329,7 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
 | 开源许可证 | 项目许可证和包元数据同步为 Apache-2.0，README 徽章与源码包信息保持一致。 |
 | 回归覆盖 | 新增项目对话标题、项目侧边栏、inline agent 续跑、历史清理、识图上传和代码块下载回归测试。 |
 
-<details>
-<summary>展开历史版本变更回顾（1.0.4 - 0.2.0）</summary>
+</details>
 
 <details>
 <summary>展开 1.0.4 变更回顾</summary>

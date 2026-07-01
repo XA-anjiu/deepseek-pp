@@ -29,7 +29,7 @@
   <a href="#feature-overview">Feature Overview</a> ·
   <a href="#use-cases">Use Cases</a> ·
   <a href="#installation">Installation</a> ·
-  <a href="#105-release-highlights">1.0.5 Highlights</a>
+  <a href="#106-release-highlights">1.0.6 Highlights</a>
 </p>
 
 ## Product Positioning
@@ -46,7 +46,7 @@ Language can follow the browser or be set to English or Simplified Chinese. Deep
 - [Feature Overview](#feature-overview)
 - [Use Cases](#use-cases)
 - [Core Features](#core-features)
-- [1.0.5 Release Highlights](#105-release-highlights)
+- [1.0.6 Release Highlights](#106-release-highlights)
 - [Installation](#installation)
 - [Friendly Links](#friendly-links)
 
@@ -297,7 +297,26 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
   <img src="assets/screenshot-sidepanel-automation.png" width="300" alt="Automation task side panel">
 </p>
 
-## 1.0.5 Release Highlights
+## 1.0.6 Release Highlights
+
+1.0.6 improves Skills and local-tool reliability, with bundled spec-driven-develop workflows, smoother GitHub and local Skill imports, persistent artifacts, more robust Shell tool results, and better DeepSeek reasoning-page detection.
+
+| Area | Main changes |
+|------|--------------|
+| Built-in Skill library | Adds spec-driven-develop, deep-discuss, and review-spd workflows that can be enabled from the Skills page for structured planning, deeper discussion, and code-review templates. |
+| Skill import stability | GitHub Skill imports make fewer requests, and local Skill imports support nested directories and preview, reducing failures when importing larger Skill libraries. |
+| Artifacts and tool results | Generated artifacts are persisted and can be restored after refresh. Large tool results use externalized payloads to reduce oversized messages and interrupted continuation. |
+| Shell Native Host | Shell tools handle local Skill preview, stdio bridging, and permission policy more reliably, making command-based local workflows easier to connect. |
+| DeepSeek page compatibility | DeepSeek reasoning pages are detected more accurately, keeping tool-block styling and extension enhancements available across more DeepSeek page shapes. |
+| Regression coverage | Adds tests for Skill imports, Shell host behavior, local Skill preview, artifact recovery, externalized tool payloads, streaming tool parsing, and bridge transport. |
+
+<details>
+<summary>Show historical release highlights (1.0.5 - 0.2.0)</summary>
+
+<details>
+<summary>Show 1.0.5 release highlights</summary>
+
+### 1.0.5 Release Highlights
 
 1.0.5 improves project context and agent-continuation reliability, making project-scoped new conversations easier to start, project conversation titles more accurate, and inline agent continuation, Vision image uploads, and code-block downloads cleaner.
 
@@ -310,8 +329,7 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
 | Open-source license | The project license and package metadata now align on Apache-2.0, keeping README badges and source-package metadata consistent. |
 | Regression coverage | Adds tests for project conversation titles, project sidebar actions, inline agent continuation, history cleanup, Vision image uploads, and code-block downloads. |
 
-<details>
-<summary>Show historical release highlights (1.0.4 - 0.2.0)</summary>
+</details>
 
 <details>
 <summary>Show 1.0.4 release highlights</summary>
