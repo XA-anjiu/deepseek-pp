@@ -60,10 +60,14 @@ describe('shell native host local_file_* tools', () => {
       create_directories: true,
     });
     expect(writeResponse.error).toBeUndefined();
-    expect(writeResponse.result?.structuredContent?.data).toMatchObject({
+    const writeData = writeResponse.result?.structuredContent?.data;
+    expect(writeData).toMatchObject({
       path: filePath,
       append: false,
     });
+    const contentBytes = Buffer.byteLength(content, 'utf8');
+    expect(writeData?.bytesWritten).toBe(contentBytes);
+    expect(writeData?.sizeBytes).toBe(contentBytes);
 
     const statResponse = await callNativeHost('local_file_stat', { path: filePath });
     expect(statResponse.error).toBeUndefined();
@@ -93,6 +97,16 @@ describe('shell native host local_file_* tools', () => {
 
     const persisted = readFileSync(filePath, 'utf8');
     expect(persisted).toBe(content);
+  });
+});
+
+describe('shell native host logLine resilience', () => {
+  it('returns a normal response when DPP_LOG_FILE points to an unwritable path', async () => {
+    const response = await callNativeHost('shell_status', {}, {
+      DPP_LOG_FILE: '/nonexistent-dir-dpp-test-xyz/unwritable.log',
+    });
+    expect(response.error).toBeUndefined();
+    expect(response.result?.structuredContent?.data?.platform).toBeTruthy();
   });
 });
 
@@ -128,9 +142,10 @@ function createNestedSkillFixture(): string {
   return root;
 }
 
-async function callNativeHost(name: string, args: Record<string, unknown>) {
+async function callNativeHost(name: string, args: Record<string, unknown>, env?: Record<string, string>) {
   const child = spawn(process.execPath, [hostPath], {
     stdio: ['pipe', 'pipe', 'pipe'],
+    env: env ? { ...process.env, ...env } : undefined,
   });
   let stdout = Buffer.alloc(0);
   let stderr = '';

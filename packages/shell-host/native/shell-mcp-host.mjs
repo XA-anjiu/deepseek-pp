@@ -13,7 +13,7 @@ import {
   type as osType,
   version as osVersion,
 } from 'node:os';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, appendFileSync } from 'node:fs';
 
 // Resolve package root from this script's location (native/ -> package root).
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -277,6 +277,27 @@ const TOOL_DEFINITIONS = [
   },
 ];
 
+// --- Logging ---
+//
+// Chrome does not surface native-host stderr to users. When DPP_LOG_FILE is set
+// (written into the wrapper script by the installer's --log-file option), every
+// log line is also appended to that file so users can capture a diagnostic
+// trace by reinstalling with --log-file and reproducing once. See issue #287.
+const LOG_FILE = process.env.DPP_LOG_FILE || '';
+const LOG_PREFIX = '[shell-mcp-host]';
+
+function logLine(message) {
+  const line = typeof message === 'string' ? message : String(message);
+  process.stderr.write(`${LOG_PREFIX} ${line}\n`);
+  if (LOG_FILE) {
+    try {
+      appendFileSync(LOG_FILE, `${new Date().toISOString()} ${LOG_PREFIX} ${line}\n`, { encoding: 'utf8' });
+    } catch {
+      // best-effort; never let logging failure crash the host
+    }
+  }
+}
+
 // --- Native messaging framing (4-byte LE length prefix) ---
 
 let buffer = Buffer.alloc(0);
@@ -293,7 +314,7 @@ function drainBuffer() {
     if (buffer.length < 4) return;
     const len = buffer.readUInt32LE(0);
     if (len === 0 || len > 10 * 1024 * 1024) {
-      process.stderr.write(`[shell-mcp-host] Invalid message length: ${len}\n`);
+      logLine(`Invalid message length: ${len}`);
       process.exit(1);
     }
     if (buffer.length < 4 + len) return;
@@ -309,7 +330,7 @@ function drainBuffer() {
         messageQueue.push(msg);
       }
     } catch (err) {
-      process.stderr.write(`[shell-mcp-host] JSON parse error: ${err.message}\n`);
+      logLine(`JSON parse error: ${err.message}`);
     }
   }
 }
@@ -380,6 +401,12 @@ function handleListTools(id) {
 async function handleCallTool(id, params) {
   const name = params?.name;
   const args = params?.arguments ?? {};
+
+  if (LOG_FILE) {
+    const contentLen = typeof args?.content === 'string' ? args.content.length : 0;
+    const argBytes = Buffer.byteLength(JSON.stringify(args), 'utf8');
+    logLine(`tools/call name=${name} argsBytes=${argBytes}${contentLen > 0 ? ` contentChars=${contentLen}` : ''}`);
+  }
 
   if (name === 'shell_status') {
     return jsonRpcResult(id, {
@@ -617,6 +644,7 @@ function createLocalFileWriteResult(args) {
     const content = args.content;
     const contentBytes = Buffer.byteLength(content, 'utf8');
     if (contentBytes > MAX_LOCAL_FILE_WRITE_BYTES) {
+      logLine(`local_file_write REJECTED path=${resolvedPath} contentBytes=${contentBytes} limit=${MAX_LOCAL_FILE_WRITE_BYTES}`);
       throw new Error(`Content exceeds the local file write limit (${contentBytes} bytes > ${MAX_LOCAL_FILE_WRITE_BYTES}).`);
     }
 
@@ -634,6 +662,9 @@ function createLocalFileWriteResult(args) {
       flag: append ? 'a' : 'w',
     });
     const stat = safeStat(resolvedPath);
+    const sizeAfter = stat?.size ?? null;
+    const sizeMatch = sizeAfter === null ? false : (append ? sizeAfter >= contentBytes : sizeAfter === contentBytes);
+    logLine(`local_file_write OK path=${resolvedPath} append=${append} bytesWritten=${contentBytes} sizeOnDisk=${sizeAfter} sizeMatch=${sizeMatch}`);
 
     return {
       content: [{ type: 'text', text: `${append ? 'Appended' : 'Wrote'} ${contentBytes} bytes to ${resolvedPath}` }],
@@ -643,11 +674,12 @@ function createLocalFileWriteResult(args) {
           path: resolvedPath,
           append,
           bytesWritten: contentBytes,
-          sizeBytes: stat?.size ?? contentBytes,
+          sizeBytes: sizeAfter ?? contentBytes,
         },
       },
     };
   } catch (err) {
+    logLine(`local_file_write ERROR path=${inputPath} error=${err instanceof Error ? err.message : String(err)}`);
     return {
       isError: true,
       content: [{ type: 'text', text: err instanceof Error ? err.message : String(err) }],
@@ -1235,7 +1267,7 @@ function closeShellSession(sessionId, reason) {
     session.idleTimer = null;
   }
   killSessionProcessGroup(session.child);
-  process.stderr.write(`[shell-mcp-host] Session ${sessionId} closed (${reason}).\n`);
+  logLine(`Session ${sessionId} closed (${reason}).`);
 }
 
 async function execInShellSession(args) {
@@ -1966,7 +1998,7 @@ function readWindowsUserMachinePathDirs() {
     });
     return splitPath(out.replace(/\r?\n/g, PATH_SEPARATOR));
   } catch (err) {
-    process.stderr.write(`[shell-mcp-host] Could not read Windows User/Machine PATH: ${err.message}\n`);
+    logLine(`Could not read Windows User/Machine PATH: ${err.message}`);
     return [];
   }
 }
@@ -2053,7 +2085,7 @@ async function main() {
     try {
       await handleMessage(envelope);
     } catch (err) {
-      process.stderr.write(`[shell-mcp-host] Error: ${err.message || err}\n`);
+      logLine(`Error: ${err.message || err}`);
       await writeNativeMessage(jsonRpcError(null, -32603, err.message || 'Internal error'));
     }
   }
@@ -2066,7 +2098,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  process.stderr.write(`[shell-mcp-host] Fatal: ${err.message || err}\n`);
+  logLine(`Fatal: ${err.message || err}`);
   for (const sessionId of [...shellSessions.keys()]) {
     closeShellSession(sessionId, 'host_shutdown');
   }

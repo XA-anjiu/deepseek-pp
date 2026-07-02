@@ -36,13 +36,14 @@ const OFFICECLI_REQUIRED_HELP_PATTERNS = [
   /--json\b/,
 ];
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const args = {
     command: 'install',
     extensionId: null,
     browser: 'chrome',
     skipOfficecli: false,
     forceOfficecli: false,
+    logFile: null,
   };
   const tokens = [...argv];
 
@@ -56,7 +57,10 @@ function parseArgs(argv) {
     else if (token === '--browser' && tokens[i + 1]) args.browser = tokens[++i].toLowerCase();
     else if (token === '--skip-officecli') args.skipOfficecli = true;
     else if (token === '--force-officecli') args.forceOfficecli = true;
-    else if (token === '--help' || token === '-h') {
+    else if (token === '--log-file') {
+      if (!tokens[i + 1]) throw new Error('--log-file requires a path argument');
+      args.logFile = tokens[++i];
+    } else if (token === '--help' || token === '-h') {
       printHelp();
       process.exit(0);
     } else {
@@ -89,10 +93,12 @@ Options:
   --browser <name>     Target browser: chrome, chromium, edge, firefox (default: chrome)
   --skip-officecli     Install only the Shell Native Host
   --force-officecli    Reinstall OfficeCLI even if a compatible binary exists
+  --log-file <path>    Write native host diagnostic logs to this file (for troubleshooting)
   --help               Show this help
 
 Examples:
   npx deepseek-pp-shell-host install --browser chrome --extension-id abcdefghijklmnopqrstuvwxyz123456
+  npx deepseek-pp-shell-host install --browser chrome --extension-id abcdefghijklmnopqrstuvwxyz123456 --log-file "$HOME/dpp-host.log"
   npx deepseek-pp-shell-host install --browser firefox
 `);
 }
@@ -185,21 +191,40 @@ function copyHostScript(installDir) {
   return hostPath;
 }
 
-function createWrapper(hostPath) {
+const LOG_META_FILENAME = 'shell-mcp-host.log-meta';
+
+export function createWrapper(hostPath, logFile) {
   const installDir = dirname(hostPath);
   const nodePath = process.execPath;
+  const metaPath = resolve(installDir, LOG_META_FILENAME);
 
   if (platform() === 'win32') {
     const wrapperPath = resolve(installDir, 'shell-mcp-host.bat');
-    const content = `@echo off\r\n"${nodePath}" "${hostPath}" %*\r\n`;
+    const setLine = logFile ? `set "DPP_LOG_FILE=${logFile.replaceAll('%', '%%')}"\r\n` : '';
+    const content = `@echo off\r\n${setLine}"${nodePath}" "${hostPath}" %*\r\n`;
     writeFileSync(wrapperPath, content);
+    writeLogMeta(metaPath, logFile);
     return wrapperPath;
   }
 
   const wrapperPath = resolve(installDir, 'shell-mcp-host');
-  const content = `#!/bin/sh\nexec "${nodePath}" "${hostPath}" "$@"\n`;
+  const envPrefix = logFile ? `DPP_LOG_FILE=${escapeShellValue(logFile)} ` : '';
+  const content = `#!/bin/sh\n${envPrefix}exec "${nodePath}" "${hostPath}" "$@"\n`;
   writeFileSync(wrapperPath, content, { mode: 0o755 });
+  writeLogMeta(metaPath, logFile);
   return wrapperPath;
+}
+
+function writeLogMeta(metaPath, logFile) {
+  if (logFile) {
+    writeFileSync(metaPath, JSON.stringify({ logFile }), 'utf8');
+  } else {
+    rmSync(metaPath, { force: true });
+  }
+}
+
+export function escapeShellValue(value) {
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
 }
 
 function writeWindowsRegistry(browser, manifestPath) {
@@ -453,7 +478,7 @@ function install(args) {
   const manifestPath = getManifestPath(args.browser);
   const manifestDir = dirname(manifestPath);
   const hostPath = copyHostScript(getHostInstallDir());
-  const wrapperPath = createWrapper(hostPath);
+  const wrapperPath = createWrapper(hostPath, args.logFile);
   const manifest = buildManifest(args, wrapperPath);
 
   mkdirSync(manifestDir, { recursive: true });
@@ -471,6 +496,7 @@ function install(args) {
   console.log(`Browser:     ${args.browser}`);
   if (manifest.allowed_origins) console.log(`Origin:      ${manifest.allowed_origins[0]}`);
   if (manifest.allowed_extensions) console.log(`Extension:   ${manifest.allowed_extensions[0]}`);
+  if (args.logFile) console.log(`Log file:    ${args.logFile}`);
   console.log('');
   if (args.skipOfficecli) {
     console.log('OfficeCLI install skipped by --skip-officecli.');
@@ -485,6 +511,7 @@ function status(args) {
   const manifest = readManifest(manifestPath);
   const officeCli = findCompatibleOfficeCli();
   const isReady = Boolean(manifest && existsSync(hostPath) && existsSync(manifest.path ?? wrapperPath));
+  const logFile = detectLogFile(wrapperPath);
 
   console.log('DeepSeek++ Shell Native Host status');
   console.log(`Browser:      ${args.browser}`);
@@ -498,6 +525,7 @@ function status(args) {
     if (manifest.allowed_origins) console.log(`Origins:      ${manifest.allowed_origins.join(', ')}`);
     if (manifest.allowed_extensions) console.log(`Extensions:   ${manifest.allowed_extensions.join(', ')}`);
   }
+  console.log(`Log file:     ${logFile || 'disabled'}`);
   if (platform() === 'win32') {
     const regKey = getRegistryKey(args.browser);
     if (regKey) console.log(`Registry:     ${regKey}`);
@@ -506,6 +534,18 @@ function status(args) {
 
   if (!isReady) {
     process.exitCode = 1;
+  }
+}
+
+export function detectLogFile(wrapperPath) {
+  const installDir = dirname(wrapperPath);
+  const metaPath = resolve(installDir, LOG_META_FILENAME);
+  if (!existsSync(metaPath)) return null;
+  try {
+    const data = JSON.parse(readFileSync(metaPath, 'utf8'));
+    return typeof data.logFile === 'string' ? data.logFile : null;
+  } catch {
+    return null;
   }
 }
 
