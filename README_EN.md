@@ -29,7 +29,7 @@
   <a href="#feature-overview">Feature Overview</a> ·
   <a href="#use-cases">Use Cases</a> ·
   <a href="#installation">Installation</a> ·
-  <a href="#106-release-highlights">1.0.6 Highlights</a>
+  <a href="#107-release-highlights">1.0.7 Highlights</a>
 </p>
 
 ## Product Positioning
@@ -46,7 +46,7 @@ Language can follow the browser or be set to English or Simplified Chinese. Deep
 - [Feature Overview](#feature-overview)
 - [Use Cases](#use-cases)
 - [Core Features](#core-features)
-- [1.0.6 Release Highlights](#106-release-highlights)
+- [1.0.7 Release Highlights](#107-release-highlights)
 - [Installation](#installation)
 - [Friendly Links](#friendly-links)
 
@@ -297,7 +297,25 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
   <img src="assets/screenshot-sidepanel-automation.png" width="300" alt="Automation task side panel">
 </p>
 
-## 1.0.6 Release Highlights
+## 1.0.7 Release Highlights
+
+1.0.7 improves Shell Native Host and MCP stdio bridge diagnostics and stability, making native tool issues easier to troubleshoot and preventing oversized native payloads from breaking the bridge.
+
+| Area | Main changes |
+|------|--------------|
+| Shell Native Host logging | The installer adds a `--log-file <path>` option that writes native host runtime logs to a file for easier `local_file_write` and native-tool troubleshooting; the status page detects the log path and handles spaces or special characters correctly. |
+| Native host startup logging | The native host now creates the log directory and writes a startup line automatically; log write failures are reported to stderr once instead of being silently swallowed. |
+| Native payload size guard | The Shell Host channel checks native payload size and rejects oversized `local_file_write` content or envelopes before opening the native port, preventing oversized writes from breaking the bridge; multimodal image/video analysis is not affected by this limit. |
+| stdio bridge UI | The stdio_bridge URL field in the MCP service form is relabeled as "Bridge endpoint URL" with a hint pointing local-executable users to the Shell Native Host preset, reducing connection failures from entering a local executable path. |
+| Regression coverage | Adds tests for installer log-path round-trip, native payload size checks, envelope-oversize branch, notification path, multimodal regression, log directory creation, and stderr diagnostics. |
+
+<details>
+<summary>Show historical release highlights (1.0.6 - 0.2.0)</summary>
+
+<details>
+<summary>Show 1.0.6 release highlights</summary>
+
+### 1.0.6 Release Highlights
 
 1.0.6 improves Skills and local-tool reliability, with bundled spec-driven-develop workflows, smoother GitHub and local Skill imports, persistent artifacts, more robust Shell tool results, and better DeepSeek reasoning-page detection.
 
@@ -310,8 +328,7 @@ npm run shell:install -- --browser chrome --extension-id <extension-id>
 | DeepSeek page compatibility | DeepSeek reasoning pages are detected more accurately, keeping tool-block styling and extension enhancements available across more DeepSeek page shapes. |
 | Regression coverage | Adds tests for Skill imports, Shell host behavior, local Skill preview, artifact recovery, externalized tool payloads, streaming tool parsing, and bridge transport. |
 
-<details>
-<summary>Show historical release highlights (1.0.5 - 0.2.0)</summary>
+</details>
 
 <details>
 <summary>Show 1.0.5 release highlights</summary>

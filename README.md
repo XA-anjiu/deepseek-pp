@@ -29,7 +29,7 @@
   <a href="#功能速览">功能速览</a> ·
   <a href="#适合场景">适合场景</a> ·
   <a href="#安装">安装</a> ·
-  <a href="#106-变更回顾">1.0.6 变更</a>
+  <a href="#107-变更回顾">1.0.7 变更</a>
 </p>
 
 ## 产品定位
@@ -46,7 +46,7 @@ DeepSeek++ 是面向 [DeepSeek](https://chat.deepseek.com) 网页版的开源浏
 - [功能速览](#功能速览)
 - [适合场景](#适合场景)
 - [核心功能](#核心功能)
-- [1.0.6 变更回顾](#106-变更回顾)
+- [1.0.7 变更回顾](#107-变更回顾)
 - [安装](#安装)
 - [友情链接](#友情链接)
 
@@ -297,7 +297,25 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
   <img src="assets/screenshot-sidepanel-automation.png" width="300" alt="自动化任务侧边栏">
 </p>
 
-## 1.0.6 变更回顾
+## 1.0.7 变更回顾
+
+1.0.7 是 Shell Native Host 和 MCP stdio 桥接的诊断与稳定性更新，重点让本机工具问题更容易排查，并防止超大本机载荷导致桥接失败。
+
+| 方向 | 主要变化 |
+|------|----------|
+| Shell Native Host 日志 | 安装器新增 `--log-file <path>` 选项，把本机 host 运行日志写到指定文件，方便排查 `local_file_write` 等本机工具问题；状态页可识别日志路径，路径含空格或特殊字符也能正确解析。 |
+| 本机 host 启动日志 | 本机 host 启动时自动创建日志目录并写入启动行，日志写入失败会在 stderr 提示一次，不再静默吞掉。 |
+| 本机载荷大小保护 | Shell Host 通道新增本机载荷大小校验，在打开本机端口前拒绝过大的 `local_file_write` 内容或整体信封，避免超大写入导致桥接失败；多模态图片/视频分析不受该上限影响。 |
+| stdio 桥接 UI | MCP 服务表单里 stdio_bridge 的 URL 字段改名为「桥接端点 URL」并增加提示，引导本地可执行程序用户改用 Shell Native Host 预设，减少误填本地 exe 路径导致的连接失败。 |
+| 回归覆盖 | 新增 installer 日志路径往返、本机载荷大小校验、信封超限分支、通知路径、多模态回归、日志目录创建和 stderr 诊断测试。 |
+
+<details>
+<summary>展开历史版本变更回顾（1.0.6 - 0.2.0）</summary>
+
+<details>
+<summary>展开 1.0.6 变更回顾</summary>
+
+### 1.0.6 变更回顾
 
 1.0.6 是 Skill 和本机工具稳定性更新，重点内置 spec-driven-develop 工作流，改善 GitHub/本机 Skill 导入体验，并让产物、Shell 工具结果和 DeepSeek 推理页面识别更可靠。
 
@@ -310,8 +328,7 @@ npm run shell:install -- --browser chrome --extension-id <扩展ID>
 | DeepSeek 页面兼容 | 更准确识别 DeepSeek 推理页面，让工具块样式和增强能力在更多 DeepSeek 页面形态下保持可用。 |
 | 回归覆盖 | 新增 Skill 导入、Shell host、本机 Skill 预览、产物恢复、外部化工具载荷、流式工具解析和桥接传输回归测试。 |
 
-<details>
-<summary>展开历史版本变更回顾（1.0.5 - 0.2.0）</summary>
+</details>
 
 <details>
 <summary>展开 1.0.5 变更回顾</summary>
